@@ -200,9 +200,14 @@ def suite_bus():
         # symlink the bus is normally invoked through
         with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=10) as r:
             page = r.read().decode("utf-8", "replace")
+        # assert behaviour, not branding — the previous marker was the old
+        # dashboard's title and broke the moment the page was redesigned
         ok("serves the real dashboard, not the placeholder",
-           "No dashboard installed" not in page and "control-plane" in page,
-           page[:120])
+           "No dashboard installed" not in page
+           and "<!DOCTYPE html>" in page
+           and "/status" in page
+           and len(page) > 10000,
+           f"{len(page)} bytes: {page[:90]}")
 
         # MCP surface
         m = api("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
