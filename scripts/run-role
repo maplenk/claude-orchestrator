@@ -92,6 +92,17 @@ fi
 # writing anything.
 export ORCHESTRATOR_DELEGATE="$ROLE"
 
+# Native CLIs take their instructions from AGENTS.md in the working directory —
+# verified against both codex and grok. This is how the role reaches a harness
+# that is not Claude Code and has no --append-system-prompt.
+install_role_file() {
+  local dir="$1"
+  if [[ -f "$dir/AGENTS.md" && ! -f "$dir/.orchestrator-agents-backup" ]]; then
+    cp "$dir/AGENTS.md" "$dir/.orchestrator-agents-backup"
+  fi
+  printf '%s\n' "$ROLE_BODY" > "$dir/AGENTS.md"
+}
+
 echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 
 # Report this delegation as a run so the dashboard can show it and the
@@ -190,14 +201,21 @@ run_harness() {
 
 case "$HARNESS" in
   codex)
-    run_harness "$HOME/.claude/bin/cliproxy-run" "${MODEL:-gpt-5.6-sol}" \
-      $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
-      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    # Native codex CLI. Role arrives via AGENTS.md; model/effort come from
+    # ~/.codex/config.toml unless pinned here.
+    install_role_file "$PWD"
+    CODEX_ARGS=(exec --skip-git-repo-check)
+    [[ -n "$MODEL" ]] && CODEX_ARGS+=(-c "model=\"$MODEL\"")
+    [[ $READONLY -eq 1 ]] && CODEX_ARGS+=(-c 'sandbox_permissions=["disk-full-read-access"]')
+    run_harness codex "${CODEX_ARGS[@]}" "$BRIEF"
     ;;
   grok)
-    run_harness "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.6}" \
-      $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
-      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    # Native grok CLI. Role arrives via AGENTS.md; the default model and
+    # reasoning effort come from ~/.grok/config.toml unless pinned here.
+    install_role_file "$PWD"
+    GROK_ARGS=(-p)
+    [[ -n "$MODEL" ]] && GROK_ARGS=(--model "$MODEL" -p)
+    run_harness grok "${GROK_ARGS[@]}" "$BRIEF"
     ;;
   pi)
     command -v pi >/dev/null || { echo "run-role: pi not on PATH" >&2; fail_run 69; }

@@ -21,7 +21,7 @@ The only harness that supports worktree isolation, so it is the default for conc
 Plugin agents are namespaced, so the Agent tool needs `orchestrator:<role>`. `run-role` takes
 the bare name, because it resolves role *files* rather than registered agent types.
 
-**codex / grok / pi** — `run-role` injects the role file as the system prompt:
+**codex / grok / pi** — `run-role` drives each model's **own** CLI, never Claude Code:
 
 ```bash
 ~/.claude/bin/run-role developer --harness pi -- "<brief>"
@@ -29,10 +29,19 @@ the bare name, because it resolves role *files* rather than registered agent typ
 ~/.claude/bin/run-role ui-developer --harness grok --model grok-4.6 -- "<brief>"
 ```
 
-It strips the frontmatter from `~/.claude/agents/<role>.md` and passes the body via
-`--append-system-prompt`, so `verifier` behaves like `verifier` whichever model is behind it —
-verified: pi/Kimi reproduces the verifier's verdict format and its "no evidence, no
-verification" rule. `--read-only` maps to each harness's strict read-only setting.
+| harness | CLI | role arrives via |
+| --- | --- | --- |
+| codex | `codex exec` | `AGENTS.md` in the working directory |
+| grok | `grok -p` | `AGENTS.md` in the working directory |
+| pi | `pi -p` | `--append-system-prompt` |
+
+Each model runs in the harness built for it, which knows its own limits and behaviour. The
+role reaches codex and grok through `AGENTS.md` — verified empirically: both read it and obey
+it. `run-role` writes the role body there and backs up any existing file first.
+
+This also keeps the orchestrator's `PreToolUse` guard out of the way entirely: a native CLI is
+not Claude Code, so no hook fires. Driving Claude Code as a proxy harness made every delegated
+agent look like an orchestrator to that hook.
 
 ## Registry
 

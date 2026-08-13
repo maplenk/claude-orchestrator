@@ -73,9 +73,9 @@ transcript rather than hidden in a config flag.
 ~/.claude/bin/run-role verifier --harness codex --read-only -- "<brief>"
 ```
 
-`run-role` strips the frontmatter from the role file and passes the body via
-`--append-system-prompt`. This works because the codex/grok adapters drive *headless Claude
-Code* pointed at a local proxy, and pi accepts the same flag.
+Each model runs in **its own harness** — `codex exec`, `grok -p`, `pi -p` — never Claude Code
+wearing another model's name. The role reaches codex and grok through `AGENTS.md` in the
+working directory, which both CLIs read; pi takes `--append-system-prompt`.
 
 Roles resolve from your own `~/.claude/agents/` first and fall back to the plugin's, so you can
 override a packaged role without editing the plugin.
