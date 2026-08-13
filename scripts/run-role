@@ -88,37 +88,131 @@ fi
 
 echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 
+# Report this delegation as a run so the dashboard can show it and the
+# bus can SIGSTOP the harness pid to pause. The harness stays a child —
+# exec would replace us and leave the run open. Every bus call is
+# best-effort: a down, slow, or erroring bus must not change the
+# harness's exit code or print anything.
+BUS_URL="http://127.0.0.1:${AGENT_BUS_PORT:-8477}"
+RUN_ID=""
+HARNESS_PID=""
+
+bus_post() {
+  curl -s --connect-timeout 1 -m 1 \
+    -X POST "${BUS_URL}$1" \
+    -H 'Content-Type: application/json' \
+    -d "$2" 2>/dev/null || true
+}
+
+open_run() {
+  local pid="$1" title payload resp
+  title="${BRIEF%%$'\n'*}"
+  if [[ ${#title} -gt 80 ]]; then
+    title="${title:0:77}..."
+  fi
+  payload="$(python3 - "$title" "$ROLE" "$HARNESS" "${MODEL}" "$pid" <<'PY' 2>/dev/null || true
+import json, sys
+print(json.dumps({
+    "title": sys.argv[1],
+    "role": sys.argv[2],
+    "harness": sys.argv[3],
+    "model": sys.argv[4],
+    "pid": int(sys.argv[5]),
+}))
+PY
+)"
+  [[ -n "$payload" ]] || return 0
+  resp="$(bus_post /runs "$payload")"
+  RUN_ID="$(printf '%s' "$resp" | python3 -c 'import json,sys
+try:
+    i = json.load(sys.stdin).get("id")
+    print("" if i is None else i)
+except Exception:
+    pass' 2>/dev/null || true)"
+}
+
+stage_run() {
+  [[ -n "$RUN_ID" ]] || return 0
+  bus_post "/runs/${RUN_ID}/stage" "{\"stage\":\"$1\"}" >/dev/null
+}
+
+close_run() {
+  local outcome="$1" code="$2"
+  [[ -n "$RUN_ID" ]] || return 0
+  bus_post "/runs/${RUN_ID}/close" "{\"outcome\":\"${outcome}\",\"exit_code\":${code}}" >/dev/null
+  RUN_ID=""
+}
+
+on_signal() {
+  trap '' INT TERM
+  if [[ -n "${HARNESS_PID:-}" ]]; then
+    kill -s "$1" "$HARNESS_PID" 2>/dev/null || true
+    HARNESS_PID=""
+  fi
+  close_run failed "$2"
+  exit "$2"
+}
+trap 'on_signal INT 130' INT
+trap 'on_signal TERM 143' TERM
+
+fail_run() {
+  trap '' INT TERM
+  open_run "$$"
+  close_run failed "$1"
+  exit "$1"
+}
+
+run_harness() {
+  local ec
+  "$@" &
+  HARNESS_PID=$!
+  open_run "$HARNESS_PID"
+  stage_run running
+  set +e
+  wait "$HARNESS_PID"
+  ec=$?
+  set -e
+  HARNESS_PID=""
+  trap '' INT TERM
+  if [[ $ec -eq 0 ]]; then
+    close_run complete 0
+  else
+    close_run failed "$ec"
+  fi
+  exit "$ec"
+}
+
 case "$HARNESS" in
   codex)
-    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-gpt-5.6-sol}" \
+    run_harness "$HOME/.claude/bin/cliproxy-run" "${MODEL:-gpt-5.6-sol}" \
       $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;
   grok)
-    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.5}" \
+    run_harness "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.5}" \
       $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;
   pi)
-    command -v pi >/dev/null || { echo "run-role: pi not on PATH" >&2; exit 69; }
+    command -v pi >/dev/null || { echo "run-role: pi not on PATH" >&2; fail_run 69; }
     if [[ $READONLY -eq 1 ]]; then
       # --tools read is the only setting that actually holds: --exclude-tools
       # edit,write leaves bash in place and the model just redirects into files.
-      exec pi -p --no-session --tools read --thinking "$THINKING" \
+      run_harness pi -p --no-session --tools read --thinking "$THINKING" \
         --model "${MODEL:-moonshotai/Kimi-K3}" \
         --append-system-prompt "$ROLE_BODY" "$BRIEF"
     fi
-    exec pi -p --no-session --thinking "$THINKING" \
+    run_harness pi -p --no-session --thinking "$THINKING" \
       --model "${MODEL:-moonshotai/Kimi-K3}" \
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;
   claude)
     echo "run-role: use the Agent tool for the claude harness:" >&2
     echo "  Agent(subagent_type: \"orchestrator:$ROLE\", isolation: \"worktree\", prompt: <brief>)" >&2
-    exit 64
+    fail_run 64
     ;;
   *)
     echo "run-role: unknown harness: $HARNESS" >&2
-    exit 64
+    fail_run 64
     ;;
 esac
