@@ -89,9 +89,15 @@ Verification is a separate agent, never self-assessment.
 Agent(subagent_type: "verifier", prompt: <spec path + wave scope + the diff to review>)
 ```
 
-Add an adversarial second opinion from a different model family when the change is risky:
-`codex-validator`, `grok-validator`, or `pi-validator`. When two disagree, that disagreement
-is the finding — surface it rather than picking the answer you prefer.
+Add an adversarial second opinion from a different model family when the change is risky —
+the same `verifier` role on another harness, told to argue for refutation:
+
+```bash
+~/.claude/bin/run-role verifier --harness codex --read-only -- "<diff + criteria>"
+```
+
+When two verifiers disagree, that disagreement is the finding — surface it rather than picking
+the answer you prefer.
 
 Read the diff yourself as well. An agent reporting "done" is a claim; the diff and the actual
 command output are the evidence.

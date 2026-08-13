@@ -96,12 +96,21 @@ does not.
 
 Match the role to the work, not to the session:
 
-| Work | Agent |
+Pick the **role** by what the task is, then the **harness** by which model should run it —
+they are separate choices.
+
+| Work | Role |
 | --- | --- |
 | General scoped implementation | `developer` |
 | Front-end, components, styling, a11y | `ui-developer` |
-| Second independent attempt, different model family | `codex-implementor`, `grok-implementor`, `pi-implementor` |
-| Verification | `verifier`, plus a `*-validator` for an adversarial second read |
+| Verification | `verifier` |
+
+```
+Agent(subagent_type: "developer", isolation: "worktree", prompt: <brief>)   # claude
+~/.claude/bin/run-role developer --harness codex -- "<brief>"               # anything else
+```
+
+A second independent attempt is the *same role on a different harness*, not a different role.
 
 After a task fails once, re-delegating to the *same* model usually reproduces the same
 mistake — its reasoning about the problem has not changed. Switch families on the second
