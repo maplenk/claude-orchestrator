@@ -95,7 +95,7 @@ case "$HARNESS" in
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;
   grok)
-    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.5}" \
+    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.6}" \
       $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;

@@ -45,7 +45,7 @@ SEED = {
             "label": "Grok — xAI via CLIProxyAPI",
             "runner": "run-role <role> --harness grok",
             "plugin": "/grok-build:* (xai-org/grok-build-plugin-cc)",
-            "model": "grok-4.5",
+            "model": "grok-4.6",
             "notes": "Good contrast to Codex on the same task.",
         },
         "pi": {
