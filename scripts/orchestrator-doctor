@@ -17,7 +17,7 @@ HOME = os.path.expanduser("~")
 CLAUDE = os.path.join(HOME, ".claude")
 BUS_PORT = os.environ.get("AGENT_BUS_PORT", "8477")
 CLIPROXY = os.environ.get("CLIPROXY_BASE_URL", "http://127.0.0.1:8317")
-TOOLS = ("run-role", "agent-bus", "agent-board", "orchestrator-harnesses")
+TOOLS = ("run-role", "agent-bus", "agent-board", "orchestrator-harnesses", "orchestrator-doctor")
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 results = []
@@ -116,6 +116,41 @@ check("harness registry", OK if registry else WARN,
       f"{len(registry.get('harnesses', {}))} harnesses on record" if registry else "not created yet",
       None if registry else "~/.claude/bin/orchestrator-harnesses",
       required=False)
+
+
+# The guard fails OPEN: a syntax error exits 1, which Claude Code treats as a
+# non-blocking error, so the tool call proceeds and enforcement silently stops.
+# That matters most when the plugin is editing itself — prove it still works.
+guard_src = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+                         "hooks", "orchestrator-guard.py")
+if os.path.exists(guard_src):
+    import tempfile
+    probe = tempfile.mkdtemp()
+    os.makedirs(os.path.join(probe, ".claude"), exist_ok=True)
+    with open(os.path.join(probe, ".claude", "settings.local.json"), "w") as fh:
+        json.dump({"outputStyle": "Orchestrator"}, fh)
+
+    def _probe(payload):
+        try:
+            p = subprocess.run([sys.executable, guard_src], input=json.dumps(payload),
+                               capture_output=True, text=True, timeout=15)
+            return p.returncode, p.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return 1, ""
+
+    rc_deny, out_deny = _probe({"cwd": probe, "tool_name": "Write",
+                                "tool_input": {"file_path": "app/x.php"}})
+    _, out_allow = _probe({"cwd": probe, "tool_name": "Write",
+                           "tool_input": {"file_path": "docs/specs/p.md"}})
+    _, out_sub = _probe({"cwd": probe, "agent_id": "s1", "tool_name": "Write",
+                         "tool_input": {"file_path": "app/x.php"}})
+    healthy = rc_deny == 0 and out_deny and not out_allow and not out_sub
+    check("guard is enforcing", OK if healthy else FAIL,
+          "denies source, allows specs, exempts subagents" if healthy
+          else "the guard is not behaving — enforcement is OFF and fails silently",
+          None if healthy else f"python3 {guard_src}  # check it parses and returns a decision")
+else:
+    check("guard is enforcing", WARN, "guard script not found", None, required=False)
 
 
 # ---------------------------------------------------------------- bus
