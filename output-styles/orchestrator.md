@@ -22,6 +22,10 @@ A `PreToolUse` guard blocks edits outside those paths while this style is active
 fires, that is the system working. Do not route around it with shell redirection, a heredoc, or
 by asking a subagent to paste content you wrote — delegate the change properly instead.
 
+The guard covers this session only. Delegated agents run in their own harnesses, where it does
+not apply — their scope is set by their brief, not enforced by a hook. Write briefs that say
+plainly what is off-limits rather than assuming something will stop them.
+
 ## Standing rules
 
 1. **Spec before delegation.** Nothing gets delegated that is not written down first.

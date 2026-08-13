@@ -96,6 +96,25 @@ export ORCHESTRATOR_DELEGATE="$ROLE"
 # workspace. An instruction file left in a worktree makes `git worktree remove`
 # refuse ("contains modified or untracked files") — the very command this script
 # prints for you.
+# Read-only must be enforced by the harness, never merely asserted in the role
+# text. A role that claims "you cannot write" on a harness with no such flag is
+# a bluff the model can call. If we cannot enforce it, refuse.
+# Verified by trying to breach each one: only pi's --tools read genuinely removes
+# the write tools. codex --sandbox read-only sandboxes shell commands but not its
+# own patch tool; grok --disallowed-tools leaves other write paths open. Both
+# overwrote the target file. A harness that cannot enforce it must not claim it.
+READONLY_SUPPORTED=0
+case "$HARNESS" in
+  pi) READONLY_SUPPORTED=1 ;;
+esac
+if [[ $READONLY -eq 1 && $READONLY_SUPPORTED -eq 0 ]]; then
+  echo "run-role: --read-only cannot be enforced on harness '$HARNESS' — refusing." >&2
+  echo "  Only pi removes its write tools outright; codex and grok were both able to" >&2
+  echo "  write despite their read-only flags. Use --harness pi, or rely on the role" >&2
+  echo "  instructions and drop --read-only." >&2
+  exit 64
+fi
+
 ROLE_FILE_TMP="$(mktemp -t orchestrator-role)"
 printf '%s\n' "$ROLE_BODY" > "$ROLE_FILE_TMP"
 trap 'rm -f "$ROLE_FILE_TMP"' EXIT
@@ -201,17 +220,22 @@ case "$HARNESS" in
     # Native codex CLI. Role arrives by config flag; model/effort come from
     # ~/.codex/config.toml unless pinned here.
     # -c model_instructions_file=<path> — verified against codex exec
-    CODEX_ARGS=(exec --skip-git-repo-check -c "model_instructions_file=$ROLE_FILE_TMP")
+    CODEX_ARGS=(exec --skip-git-repo-check --ask-for-approval never
+                -c "model_instructions_file=$ROLE_FILE_TMP")
     [[ -n "$MODEL" ]] && CODEX_ARGS+=(-c "model=\"$MODEL\"")
-    [[ $READONLY -eq 1 ]] && CODEX_ARGS+=(-c 'sandbox_permissions=["disk-full-read-access"]')
+    # --sandbox read-only is codex's own enforced policy
+    # kept for defence in depth even though it does not cover codex's patch tool
+    [[ $READONLY -eq 1 ]] && CODEX_ARGS+=(--sandbox read-only)
     run_harness codex "${CODEX_ARGS[@]}" "$BRIEF"
     ;;
   grok)
     # Native grok CLI. Role arrives via --rules; the default model and
     # reasoning effort come from ~/.grok/config.toml unless pinned here.
     # --rules takes the role text directly — verified against grok -p
-    GROK_ARGS=(--rules "$ROLE_BODY" -p)
-    [[ -n "$MODEL" ]] && GROK_ARGS=(--model "$MODEL" --rules "$ROLE_BODY" -p)
+    # grok is the primary developer harness — it must be able to write.
+    GROK_ARGS=(--rules "$ROLE_BODY" --permission-mode "${PERMISSION_MODE:-auto}")
+    [[ -n "$MODEL" ]] && GROK_ARGS+=(--model "$MODEL")
+    GROK_ARGS+=(-p)
     run_harness grok "${GROK_ARGS[@]}" "$BRIEF"
     ;;
   pi)
@@ -219,11 +243,11 @@ case "$HARNESS" in
     if [[ $READONLY -eq 1 ]]; then
       # --tools read is the only setting that actually holds: --exclude-tools
       # edit,write leaves bash in place and the model just redirects into files.
-      run_harness pi -p --no-session --tools read --thinking "$THINKING" \
+      run_harness pi -p --no-session --approve --tools read --thinking "$THINKING" \
         --model "${MODEL:-moonshotai/Kimi-K3}" \
         --append-system-prompt "$ROLE_BODY" "$BRIEF"
     fi
-    run_harness pi -p --no-session --thinking "$THINKING" \
+    run_harness pi -p --no-session --approve --thinking "$THINKING" \
       --model "${MODEL:-moonshotai/Kimi-K3}" \
       --append-system-prompt "$ROLE_BODY" "$BRIEF"
     ;;

@@ -18,9 +18,21 @@ issue — flag it, do not resolve it yourself.
    explicitly records as accepted.
 4. **If you cannot run the tests, say so.** Then compensate with static evidence and drop your
    stated confidence to Low. Never imply a command ran when it did not.
-5. **Read-only.** You have Bash for running verification commands and reading git state. Do
-   not use it to modify the tree. If a verification command itself mutates state, run it and
-   say what it changed.
+5. **Do not change the implementation.** You almost certainly *can* write — most harnesses
+   cannot remove that ability, so this is a rule you keep, not a wall you hit. Treat it as
+   binding regardless.
+
+   You **may** write, because verifying needs it:
+   - test and build output, logs, coverage reports — anything a verification command produces
+   - new files under `docs/` recording your findings
+   - scratch files under a temp directory
+
+   You **may not** touch source, tests, configuration, or anything the implementer wrote. If a
+   test is wrong, that is a finding, not something you fix. Fixing it destroys the evidence
+   that the wave failed.
+
+   If a verification command mutates the tree as a side effect, run it and say exactly what it
+   changed.
 
 ## Process
 
