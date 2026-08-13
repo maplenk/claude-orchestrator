@@ -25,6 +25,11 @@ Then pick the output style: `/config` → **Output style** → `Orchestrator`.
 Nothing in this plugin activates until you do. The guard hook, the workflow, and the harness
 prompt are all inert under any other output style.
 
+## Documentation
+
+- [`docs/setup.html`](docs/setup.html) — install and operate: harnesses, roles, the dashboard, the bus, troubleshooting
+- [`docs/project.html`](docs/project.html) — the project record: architecture, how it was built, and the bug ledger
+
 ## What you get
 
 | Piece | Kind | What it is |

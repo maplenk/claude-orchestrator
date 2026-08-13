@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Orchestrator Setup</title>
 <style>
 :root {
@@ -175,7 +176,7 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
 
     <li><div class="step-body">
       <h3>Restart the session</h3>
-      <p>A <code>SessionStart</code> hook symlinks the five tools into <code>~/.claude/bin/</code>. Plugin file bodies don't get <code>${CLAUDE_PLUGIN_ROOT}</code> expanded, so the role definitions need a stable path to point at. Until the hook has run, those paths don't exist.</p>
+      <p>A <code>SessionStart</code> hook symlinks five tools into <code>~/.claude/bin/</code>. Plugin file bodies don't get <code>${CLAUDE_PLUGIN_ROOT}</code> expanded, so the role definitions need a stable path to point at. Until the hook has run, those paths don't exist.</p>
     </div></li>
 
     <li><div class="step-body">
@@ -207,13 +208,14 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
 <section>
   <h2>Harnesses</h2>
   <p class="lede">Only <code>claude</code> is required. Each additional harness buys one more independent model family — which matters because re-delegating a failed task to the same model usually reproduces the same mistake.</p>
+  <p>Every model runs in <strong>its own CLI</strong> — never Claude Code wearing another model's name — so each applies its own context and output limits.</p>
   <div class="scroll"><table>
-    <thead><tr><th>Harness</th><th>Needs</th><th class="mono">Install</th></tr></thead>
+    <thead><tr><th>Harness</th><th class="mono">Runs</th><th>Needs</th><th class="mono">Companion plugin</th></tr></thead>
     <tbody>
-      <tr><td class="mono">claude</td><td>Nothing — built in. The only harness with worktree isolation.</td><td class="dash">—</td></tr>
-      <tr><td class="mono">codex</td><td>CLIProxyAPI on :8317, plus <code>cliproxy.key</code></td><td class="mono">/plugin install codex@openai-codex</td></tr>
-      <tr><td class="mono">grok</td><td>Same proxy as codex</td><td class="mono">/plugin install grok-build@xai-grok-build</td></tr>
-      <tr><td class="mono">pi</td><td>pi CLI and one authenticated provider</td><td class="mono">npm i -g @earendil-works/pi-coding-agent</td></tr>
+      <tr><td class="mono">claude</td><td class="mono">Agent tool</td><td>Nothing — built in. The only harness with native worktree isolation.</td><td class="dash">—</td></tr>
+      <tr><td class="mono">codex</td><td class="mono">codex exec</td><td>codex CLI, authenticated</td><td class="mono">codex@openai-codex</td></tr>
+      <tr><td class="mono">grok</td><td class="mono">grok -p</td><td>grok CLI, authenticated</td><td class="mono">grok-build@xai-grok-build</td></tr>
+      <tr><td class="mono">pi</td><td class="mono">pi -p</td><td>pi CLI and one authenticated provider</td><td class="mono">pi@agents365-pi</td></tr>
     </tbody>
   </table></div>
   <p>The plugins are optional but worth having: they add background job control, review commands, and status/result/cancel. Use those for reviews; use <code>run-role</code> when you need one of <em>your</em> role definitions driving the model.</p>
@@ -227,11 +229,22 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
     <tbody>
       <tr><td>developer</td><td>Scoped implementor</td><td class="cell">Agent(orchestrator:developer)</td><td class="cell">run-role developer --harness X</td></tr>
       <tr><td>ui-developer</td><td>Front-end, a11y, design system</td><td class="cell">Agent(orchestrator:ui-developer)</td><td class="cell">run-role ui-developer --harness X</td></tr>
-      <tr><td>verifier</td><td>Evidence-driven check</td><td class="cell">Agent(orchestrator:verifier)</td><td class="cell">run-role verifier --harness X --read-only</td></tr>
+      <tr><td>verifier</td><td>Evidence-driven check</td><td class="cell">Agent(orchestrator:verifier)</td><td class="cell">run-role verifier --harness X</td></tr>
     </tbody>
   </table></div>
   <p>Plugin agents are namespaced, so the Agent tool needs <code>orchestrator:&lt;role&gt;</code>. <code>run-role</code> takes the bare name — it resolves role <em>files</em>, not registered agent types, and checks your own <code>~/.claude/agents/</code> first so you can override a packaged role without editing the plugin.</p>
+  <p>The role reaches each CLI <strong>by flag</strong> — <code>-c model_instructions_file=</code> for codex, <code>--rules</code> for grok, <code>--append-system-prompt</code> for pi — so nothing is written into your workspace and worktrees stay cleanly removable.</p>
+  <p>Add <code>--worktree</code> to give a task its own checkout. It prints the branch, the base SHA it cut from, and the merge and cleanup commands. It is opt-in: where an agent's work lands is your decision, not a silent default.</p>
+  <div class="note warn"><p><strong><code>--read-only</code> is refused except on pi.</strong> Only pi's <code>--tools read</code> genuinely removes the write tools. codex's sandbox governs shell commands but not its own patch tool, and grok's tool denylist leaves other paths open — both were verified writing the target file anyway. A flag that reports success and enforces nothing is worse than no flag, so <code>run-role</code> refuses rather than pretending.</p></div>
   <p>Model choice belongs to the role × harness pair. <code>harnesses.json</code> takes a <code>modelByRole</code> map — pi runs Kimi for <code>ui-developer</code> and DeepSeek for everything else.</p>
+</section>
+
+<section>
+  <h2>The dashboard</h2>
+  <p class="lede">The bus serves a live control plane at <code>http://127.0.0.1:8477/</code> — the same port, no extra process.</p>
+  <p>It shows the current wave and its four stages, runs with their real durations and outcomes, the doctor's checks with a copyable fix beside each, the harnesses you can delegate to, registered agents, and the message feed. Every figure traces to an API field: the success rate reads as a fraction of closed runs rather than a percentage, and nav entries with no backing data say <strong>NOT YET</strong> rather than showing invented numbers.</p>
+  <p>Pause is real — it sends <code>SIGSTOP</code> to the run's process and <code>SIGCONT</code> to resume. Safe for a breather; a process frozen mid-request to a model API may have its socket time out, so do not pause for an hour.</p>
+  <p>Theme is explicit: Light, Dark or System, persisted. The page is re-read from disk on every request, so if you are editing it the next refresh shows your change with no restart.</p>
 </section>
 
 <section>
@@ -275,10 +288,17 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
   ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/</pre>
   </div></details>
 
+  <details><summary>Delegated agents can’t write anything</summary>
+  <div class="dbody">
+    <p>The guard exempts subagents by <code>agent_id</code>, but a <code>run-role</code> harness is a top-level session and has none — so it looks exactly like an orchestrator. <code>run-role</code> marks its process tree with <code>ORCHESTRATOR_DELEGATE</code> and the guard exempts on that.</p>
+    <p>If you see denials in a delegated agent's log, check that variable survived into its environment. Native CLIs sidestep it entirely — codex, grok and pi are not Claude Code, so no hook fires for them at all.</p>
+  </div></details>
+
   <details><summary>The guard isn’t blocking edits</summary>
   <div class="details-body">
     <p>It only acts when the output style is exactly <code>Orchestrator</code>, and it deliberately ignores any tool call carrying an <code>agent_id</code> — subagents are the implementors and must be able to write.</p>
     <p>Output style is read once at session start. If you just selected it, start a new session or <code>/clear</code>.</p>
+    <p>Plugin output styles are stored <em>namespaced</em> as <code>orchestrator:Orchestrator</code>. A check comparing against the bare name never matches, and the guard then enforces nothing while appearing healthy. <code>orchestrator-doctor</code> reports the real value it found, so if enforcement seems absent, read that line rather than trusting the style picker.</p>
   </div></details>
 
   <details><summary>A pi run takes minutes, or times out</summary>
