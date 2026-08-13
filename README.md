@@ -10,8 +10,14 @@ is no per-model copy of a role.
 ## Install
 
 ```
-/plugin marketplace add ~/Documents/claude-orchestrator
+/plugin marketplace add maplenk/claude-orchestrator
 /plugin install orchestrator@orchestrator-marketplace
+```
+
+To hack on it, point the marketplace at a local clone instead of the GitHub repo:
+
+```
+/plugin marketplace add ~/path/to/claude-orchestrator
 ```
 
 Then pick the output style: `/config` → **Output style** → `Orchestrator`.
@@ -30,7 +36,7 @@ prompt are all inert under any other output style.
 | `ui-developer` | agent | front-end implementor |
 | `verifier` | agent | evidence-driven check against acceptance criteria |
 
-Plus four tools, symlinked to `~/.claude/bin/` on session start:
+Plus five tools, symlinked to `~/.claude/bin/` on session start:
 
 | Tool | Purpose |
 | --- | --- |
@@ -38,6 +44,7 @@ Plus four tools, symlinked to `~/.claude/bin/` on session start:
 | `orchestrator-harnesses` | probe which harnesses are reachable |
 | `agent-bus` | MCP + REST message bus for cross-harness comms |
 | `agent-board` | read the bus's message log without a server |
+| `orchestrator-doctor` | check that everything is installed and wired |
 
 ## Why an output style and not just a skill
 
@@ -112,7 +119,7 @@ when the version is unchanged, so edits to the repo will not take effect. Either
 in `plugin.json`, or sync the cache directly:
 
 ```bash
-rsync -a --delete --exclude='.git' ~/Documents/claude-orchestrator/ \
+rsync -a --delete --exclude='.git' ./ \
   ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/
 ```
 

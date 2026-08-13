@@ -168,7 +168,7 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
   <ol class="steps">
     <li><div class="step-body">
       <h3>Add the marketplace and install</h3>
-      <pre><span class="p">/plugin</span> marketplace add ~/Documents/claude-orchestrator
+      <pre><span class="p">/plugin</span> marketplace add maplenk/claude-orchestrator
 <span class="p">/plugin</span> install orchestrator@orchestrator-marketplace</pre>
       <p>Type these — they're slash commands, not shell.</p>
     </div></li>
@@ -271,7 +271,7 @@ footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color
   <details><summary>Edits to the repo don’t take effect</summary>
   <div class="details-body">
     <p>Installing from a local path <em>copies</em> the repo into the plugin cache, and <code>/reload-plugins</code> won't re-copy while the version is unchanged. Either bump <code>version</code> in <code>plugin.json</code>, or sync the cache directly:</p>
-    <pre>rsync -a --delete --exclude='.git' ~/Documents/claude-orchestrator/ \
+    <pre>rsync -a --delete --exclude='.git' ./ \
   ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/</pre>
   </div></details>
 
