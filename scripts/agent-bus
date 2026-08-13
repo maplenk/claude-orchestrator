@@ -306,7 +306,10 @@ class Handler(BaseHTTPRequestHandler):
         self._reply({"error": "not found"}, 404)
 
     def _serve_ui(self):
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # realpath, not abspath: this script is normally invoked through the
+        # ~/.claude/bin symlink, and abspath would resolve ui/ next to the symlink
+        # rather than next to the plugin, serving the placeholder instead.
+        root = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
         page = os.path.join(root, "ui", "dashboard.html")
         try:
             with open(page, "rb") as fh:

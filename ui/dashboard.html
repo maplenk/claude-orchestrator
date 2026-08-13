@@ -265,7 +265,7 @@ a:hover{color:var(--ink)}
   <div class="page">
     <header class="header">
       <h1>orchestrator<span>/control-plane</span></h1>
-      <span class="addr">127.0.0.1:8477</span>
+      <span class="addr" id="bus-addr"></span>
       <span class="spacer"></span>
       <span class="channel">channel <b id="channel-name">—</b></span>
       <span class="live" id="live-label">connecting…</span>
@@ -384,7 +384,12 @@ a:hover{color:var(--ink)}
 (function () {
   "use strict";
 
-  var BASE = "http://127.0.0.1:8477";
+  // Prefer the page origin (dashboard is served by the bus). file:// has no useful
+  // origin/host, so fall back to the default local bus address.
+  var FALLBACK_ORIGIN = "http://127.0.0.1:8477";
+  var fromDisk = location.protocol === "file:" || location.origin === "null" || !location.origin;
+  var BASE = fromDisk ? FALLBACK_ORIGIN : location.origin;
+  var HOST = fromDisk || !location.host ? "127.0.0.1:8477" : location.host;
   var POLL_MS = 3000;
   var STATUS_MS = 10000;
   var DEGRADED_FIX = "restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin";
@@ -405,6 +410,7 @@ a:hover{color:var(--ink)}
   };
 
   var el = {
+    busAddr: document.getElementById("bus-addr"),
     channelName: document.getElementById("channel-name"),
     liveLabel: document.getElementById("live-label"),
     btnRefresh: document.getElementById("btn-refresh"),
@@ -624,12 +630,13 @@ a:hover{color:var(--ink)}
 
     if (st === "offline") {
       el.bannerOffline.hidden = false;
-      el.bannerOfflineDetail.textContent = "The bus at 127.0.0.1:8477 stopped answering.";
       if (!state.lastOkAt) {
-        // Never successfully connected — do not invent a freshness age.
+        // Never successfully connected — do not invent a past outage or freshness age.
+        el.bannerOfflineDetail.textContent = "No response from the bus at " + HOST + ".";
         el.bannerOfflineSub.textContent =
           "Nothing has been received yet. Start the bus, then wait a moment — the page recovers on its own.";
       } else {
+        el.bannerOfflineDetail.textContent = "The bus at " + HOST + " stopped answering.";
         var age = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
         el.bannerOfflineSub.textContent =
           "Everything below is the last response received, " + age +
@@ -1153,6 +1160,8 @@ a:hover{color:var(--ink)}
       announce("Refreshed");
     });
   }
+
+  if (el.busAddr) el.busAddr.textContent = HOST;
 
   el.btnRefresh.addEventListener("click", refreshNow);
   el.togglePass.addEventListener("click", function () {

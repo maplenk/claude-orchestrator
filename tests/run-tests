@@ -181,6 +181,14 @@ def suite_bus():
         ok("status carries harnesses and roles",
            "harnesses" in s and "roles" in s)
 
+        # the dashboard must resolve relative to the plugin, not to the ~/.claude/bin
+        # symlink the bus is normally invoked through
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/", timeout=10) as r:
+            page = r.read().decode("utf-8", "replace")
+        ok("serves the real dashboard, not the placeholder",
+           "No dashboard installed" not in page and "control-plane" in page,
+           page[:120])
+
         # MCP surface
         m = api("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
         names = {t["name"] for t in m["result"]["tools"]}
