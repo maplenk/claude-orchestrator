@@ -131,6 +131,24 @@ if [[ $READONLY -eq 1 && $READONLY_SUPPORTED -eq 0 ]]; then
   exit 64
 fi
 
+# Title for the run record: the first line of the brief that actually says
+# something. Taking line 1 blindly titled every run "## Task", because that is
+# how a well-formed brief starts.
+RUN_TITLE="$(printf '%s\n' "$BRIEF" | python3 -c '
+import sys, re
+for raw in sys.stdin:
+    line = raw.strip()
+    if not line:
+        continue
+    line = re.sub(r"^#{1,6}\s*", "", line)          # drop markdown heading marks
+    line = re.sub(r"^[-*+]\s+", "", line)           # and list bullets
+    if not line or line.lower() in ("task", "goal", "brief"):
+        continue                                     # skip bare section labels
+    print(line[:80])
+    break
+' 2>/dev/null)"
+[[ -z "$RUN_TITLE" ]] && RUN_TITLE="$ROLE on $HARNESS"
+
 ROLE_FILE_TMP="$(mktemp -t orchestrator-role)"
 if [[ -n "$ROLE_REMINDER" ]]; then
   ROLE_BODY="$ROLE_BODY
@@ -165,10 +183,7 @@ bus_post() {
 
 open_run() {
   local pid="$1" title payload resp
-  title="${BRIEF%%$'\n'*}"
-  if [[ ${#title} -gt 80 ]]; then
-    title="${title:0:77}..."
-  fi
+  title="$RUN_TITLE"
   payload="$(python3 - "$title" "$ROLE" "$HARNESS" "${MODEL}" "$pid" <<'PY' 2>/dev/null || true
 import json, sys
 print(json.dumps({
@@ -246,7 +261,10 @@ case "$HARNESS" in
     # Native codex CLI. Role arrives by config flag; model/effort come from
     # ~/.codex/config.toml unless pinned here.
     # -c model_instructions_file=<path> — verified against codex exec
-    CODEX_ARGS=(exec --skip-git-repo-check --ask-for-approval never
+    # NOT --ask-for-approval: that is a top-level codex flag and `codex exec`
+    # rejects it outright (exit 2). exec takes the same setting as a config key.
+    CODEX_ARGS=(exec --skip-git-repo-check
+                -c approval_policy="never"
                 -c "model_instructions_file=$ROLE_FILE_TMP")
     [[ -n "$MODEL" ]] && CODEX_ARGS+=(-c "model=\"$MODEL\"")
     # --sandbox read-only is codex's own enforced policy
