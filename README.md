@@ -61,6 +61,10 @@ While active it blocks `Edit`/`Write`/`NotebookEdit` outside `docs/specs/` and `
 mutating git, in-place shell edits, and redirection into source. It parses commands at command
 position, so `grep -rn "rm" app/` is allowed and `git status && rm -rf app/` is not.
 
+When you explicitly ask for a commit, prefix it with `ORCHESTRATOR_COMMIT=1` — committing is a
+legitimate part of the workflow, and the prefix keeps the authorisation visible in the
+transcript rather than hidden in a config flag.
+
 ## Harnesses
 
 ```bash
@@ -110,6 +114,17 @@ Three deliberate design choices:
   separated by channel, which defaults to the git branch.
 
 Loop guard refuses messages past 6 hops.
+
+## Tests
+
+```bash
+tests/run-tests              # all suites
+tests/run-tests guard        # guard | bus | role
+```
+
+51 checks, no dependencies, no network. The bus suite starts its own server on port 8479 so it
+never disturbs a running one. The guard suite is the one that matters most — its allow/deny
+matrix is easy to break with a well-meaning regex change.
 
 ## Developing on this plugin
 

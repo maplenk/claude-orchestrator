@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Regression tests for the orchestrator plugin. No dependencies, no network.
+
+    tests/run-tests            # everything
+    tests/run-tests guard      # one suite: guard | bus | role
+
+Starts its own bus on a scratch port so it never touches a running one.
+"""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GUARD = os.path.join(ROOT, "hooks", "orchestrator-guard.py")
+BUS = os.path.join(ROOT, "scripts", "agent-bus")
+RUN_ROLE = os.path.join(ROOT, "scripts", "run-role")
+PORT = int(os.environ.get("TEST_BUS_PORT", 8479))
+
+passed = failed = 0
+
+
+def ok(name, cond, detail=""):
+    global passed, failed
+    if cond:
+        passed += 1
+        print(f"  pass  {name}")
+    else:
+        failed += 1
+        print(f"  FAIL  {name}" + (f"\n          {detail}" if detail else ""))
+
+
+# ---------------------------------------------------------------- guard
+
+def guard(payload, cwd):
+    p = subprocess.run([sys.executable, GUARD], input=json.dumps(payload),
+                       capture_output=True, text=True, timeout=20)
+    return bool(p.stdout.strip())        # non-empty stdout == deny
+
+
+def suite_guard():
+    print("\nguard")
+    tmp = tempfile.mkdtemp()
+    os.makedirs(os.path.join(tmp, ".claude"), exist_ok=True)
+
+    def style(name):
+        with open(os.path.join(tmp, ".claude", "settings.local.json"), "w") as fh:
+            json.dump({"outputStyle": name}, fh)
+
+    def bash(cmd, agent=None):
+        e = {"cwd": tmp, "tool_name": "Bash", "tool_input": {"command": cmd}}
+        if agent:
+            e["agent_id"] = agent
+        return guard(e, tmp)
+
+    def write(path, agent=None):
+        e = {"cwd": tmp, "tool_name": "Write", "tool_input": {"file_path": path}}
+        if agent:
+            e["agent_id"] = agent
+        return guard(e, tmp)
+
+    # inert unless the style is active — this is what keeps it out of normal sessions
+    style("Default")
+    ok("inert under Default style", not write("app/x.php"))
+    ok("inert under Default style (bash)", not bash("rm -rf app/"))
+
+    style("Orchestrator")
+
+    # subagents implement; the guard must never touch them
+    ok("subagent may write source", not write("app/x.php", agent="sub-1"))
+    ok("subagent may run mutating git", not bash("git commit -m x", agent="sub-1"))
+
+    # the core rule
+    ok("denies source write", write("app/v3/OrderReport.php"))
+    ok("denies unrelated docs write", write("docs/other.md"))
+    ok("allows spec write", not write("docs/specs/plan.md"))
+    ok("allows review write", not write("docs/reviews/wave-1.md"))
+
+    # shell paths around the rule
+    for cmd in ("git commit -m x", "git push origin HEAD", "git checkout -b f",
+                "git stash", "echo x > app/y.php", "sed -i '' s/a/b/ app/x.php",
+                "rm -rf app/models", "mv app/a.php app/b.php", "tee app/out.php",
+                "git status && rm -rf app/", "chmod +x scripts/deploy.sh"):
+        ok(f"denies: {cmd}", bash(cmd))
+
+    for cmd in ("git status --short", "git diff --stat", "git log --oneline -5",
+                "git rev-list --count master..HEAD", "grep -rn \"rm\" app/",
+                "tail -n 50 /tmp/x.log", "mkdir -p docs/specs",
+                "php artisan test --filter=X", "git diff | head -20",
+                "node c.mjs --json > docs/reviews/w1.json",
+                "echo note >> docs/specs/plan.md"):
+        ok(f"allows: {cmd}", not bash(cmd))
+
+    # the explicit, visible escape hatch for an authorised commit
+    ok("escape hatch permits commit", not bash("ORCHESTRATOR_COMMIT=1 git commit -m spec"))
+    ok("escape hatch is not implicit", bash("git commit -m spec"))
+
+
+# ---------------------------------------------------------------- bus
+
+def api(path, payload=None, timeout=30):
+    url = f"http://127.0.0.1:{PORT}{path}"
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
+
+
+def suite_bus():
+    print("\nbus")
+    tmp = tempfile.mkdtemp()
+    subprocess.run(["git", "init", "-q"], cwd=tmp, timeout=20)
+    proc = subprocess.Popen([sys.executable, BUS, "serve", "--port", str(PORT),
+                             "--session", "TEST"], cwd=tmp,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                api("/health", timeout=2)
+                break
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.2)
+        else:
+            ok("bus starts", False, "never became healthy")
+            return
+
+        ok("bus starts", True)
+
+        a = api("/register", {"name": "orchestrator"})
+        b = api("/register", {"name": "developer"})
+        ok("register issues a token", bool(a.get("token")) and a["token"] != b.get("token"))
+
+        # identity comes from the token, not from what the caller claims
+        api("/send", {"token": b["token"], "to": "all", "msg": "hi",
+                      "from": "orchestrator"})
+        msgs = api("/read", {"token": a["token"]})["messages"]
+        ok("identity is issued, not claimed",
+           msgs[-1]["from"] == "developer", f"got {msgs[-1]['from']}")
+
+        ok("forged token rejected",
+           "error" in api("/send", {"token": "BOGUS", "msg": "x"}))
+
+        ok("loop guard trips at max hops",
+           "error" in api("/send", {"token": a["token"], "msg": "x", "hops": 99}))
+
+        # cursor must be the last message number, not a count of matches
+        r = api("/read", {"token": b["token"]})
+        cur = r["cursor"]
+        ok("cursor is a message number", cur >= len(r["messages"]))
+
+        # waiting from the current cursor must not re-deliver
+        w = api("/wait", {"token": b["token"], "since": cur, "timeout": 2}, timeout=20)
+        ok("wait does not re-deliver seen messages",
+           w["messages"] == [] and w.get("timeout") is True)
+
+        # and must wake on a genuinely new message
+        got = {}
+
+        def waiter():
+            got["r"] = api("/wait", {"token": b["token"], "since": cur, "timeout": 20},
+                           timeout=30)
+        t = threading.Thread(target=waiter)
+        t.start()
+        time.sleep(1.5)
+        api("/send", {"token": a["token"], "to": "developer", "msg": "wake up"})
+        t.join(timeout=25)
+        ok("wait wakes on a new message",
+           bool(got.get("r", {}).get("messages")), str(got.get("r")))
+
+        # doctor is slow; /status must offer a fast path
+        t0 = time.time()
+        s = api("/status?doctor=0", timeout=15)
+        ok("status?doctor=0 is fast", (time.time() - t0) < 3.0,
+           f"{time.time()-t0:.1f}s")
+        ok("status carries harnesses and roles",
+           "harnesses" in s and "roles" in s)
+
+        # MCP surface
+        m = api("/mcp", {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        names = {t["name"] for t in m["result"]["tools"]}
+        ok("mcp exposes chat tools",
+           {"chat_register", "chat_send", "chat_read", "chat_wait"} <= names,
+           str(names))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
+
+
+# ---------------------------------------------------------------- run-role
+
+def suite_role():
+    print("\nrun-role")
+    p = subprocess.run([RUN_ROLE], capture_output=True, text=True, timeout=20)
+    ok("usage without args", "usage: run-role" in p.stderr)
+    ok("lists available roles", "verifier" in p.stderr, p.stderr[:200])
+
+    p = subprocess.run([RUN_ROLE, "nosuch", "--harness", "pi", "--", "x"],
+                       capture_output=True, text=True, timeout=20)
+    ok("rejects unknown role", "no such role" in p.stderr)
+
+    p = subprocess.run([RUN_ROLE, "developer", "--harness", "claude", "--", "x"],
+                       capture_output=True, text=True, timeout=20)
+    ok("claude harness points at the Agent tool",
+       "subagent_type" in p.stderr and "orchestrator:developer" in p.stderr)
+
+    p = subprocess.run([RUN_ROLE, "developer", "--harness", "nope", "--", "x"],
+                       capture_output=True, text=True, timeout=20)
+    ok("rejects unknown harness", "unknown harness" in p.stderr)
+
+    # role bodies must survive frontmatter stripping
+    for role in ("developer", "ui-developer", "verifier"):
+        f = os.path.join(ROOT, "agents", f"{role}.md")
+        body = open(f).read().split("---", 2)[-1].strip()
+        ok(f"{role} has a body after frontmatter", len(body) > 400, f"{len(body)} chars")
+
+
+SUITES = {"guard": suite_guard, "bus": suite_bus, "role": suite_role}
+
+if __name__ == "__main__":
+    which = sys.argv[1:] or list(SUITES)
+    for name in which:
+        if name not in SUITES:
+            print(f"unknown suite: {name}; have {', '.join(SUITES)}")
+            sys.exit(2)
+        SUITES[name]()
+    print(f"\n{passed} passed, {failed} failed")
+    sys.exit(1 if failed else 0)

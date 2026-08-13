@@ -123,6 +123,12 @@ def segments(cmd):
 
 
 def check_bash(cmd, cwd):
+    # The guard stops the lazy path, not a determined one — the output style already
+    # says not to route around it. So the escape hatch is deliberately explicit and
+    # visible in the transcript: the user can see exactly what was authorised.
+    if "ORCHESTRATOR_COMMIT=1" in cmd:
+        return
+
     for seg in segments(cmd):
         try:
             tokens = shlex.split(seg)
@@ -148,7 +154,9 @@ def check_bash(cmd, cwd):
             if MUTATING_GIT.search("git " + joined):
                 deny(
                     "Orchestrator mode: mutating git is the implementor's job. Read-only git "
-                    "(status, diff, log, rev-list, show, worktree list) is allowed."
+                    "(status, diff, log, rev-list, show, worktree list) is allowed. If the "
+                    "user explicitly asked you to commit, prefix the command with "
+                    "ORCHESTRATOR_COMMIT=1 so the authorisation is visible."
                 )
             continue
 

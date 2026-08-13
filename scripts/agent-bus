@@ -37,6 +37,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 MAX_HOPS = 6
+DOCTOR_TTL = 60          # seconds; the doctor subprocess is slow, do not run it per request
+DOCTOR_CACHE = [None, 0.0]
 PROTOCOL = "2025-06-18"
 LOCK = threading.Lock()
 NEW_MSG = threading.Condition(LOCK)
@@ -184,8 +186,12 @@ def op_who(**_):
     return {"ok": True, "session": STATE["session"], "agents": agents}
 
 
-def op_status(**_):
-    """Everything the dashboard needs, in one call."""
+def op_status(doctor=1, **_):
+    """Everything the dashboard needs, in one call.
+
+    Pass doctor=0 to skip the (slow) health probe and get an instant response.
+    """
+    want_doctor = doctor
     home = os.path.expanduser("~")
     registry = {}
     try:
@@ -195,14 +201,20 @@ def op_status(**_):
         pass
 
     doctor = None
-    doc = os.path.join(home, ".claude", "bin", "orchestrator-doctor")
-    if os.path.exists(doc):
-        try:
-            p = subprocess.run([sys.executable, doc, "--json"],
-                               capture_output=True, text=True, timeout=45)
-            doctor = json.loads(p.stdout)
-        except (OSError, ValueError, subprocess.SubprocessError):
-            doctor = None
+    if str(want_doctor).lower() not in ("0", "false", "no"):
+        cached, when = DOCTOR_CACHE
+        if cached is not None and (time.time() - when) < DOCTOR_TTL:
+            doctor = cached
+        else:
+            doc = os.path.join(home, ".claude", "bin", "orchestrator-doctor")
+            if os.path.exists(doc):
+                try:
+                    p = subprocess.run([sys.executable, doc, "--json"],
+                                       capture_output=True, text=True, timeout=60)
+                    doctor = json.loads(p.stdout)
+                    DOCTOR_CACHE[0], DOCTOR_CACHE[1] = doctor, time.time()
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    doctor = None
 
     msgs = read_msgs()
     return {
@@ -409,24 +421,62 @@ def serve(args):
             pass
 
 
-def info(_args):
+def info(args):
+    """Prefer the live server over the on-disk handshake, which may be stale."""
+    port = getattr(args, "port", None) or int(os.environ.get("AGENT_BUS_PORT", 8477))
+    try:
+        r = subprocess.run(["curl", "-fsS", "-m", "3", f"http://127.0.0.1:{port}/status?doctor=0"],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            d = json.loads(r.stdout)
+            print(json.dumps({"session": d.get("session"), "channel": d.get("channel"),
+                              "url": f"http://127.0.0.1:{port}",
+                              "mcp": f"http://127.0.0.1:{port}/mcp",
+                              "messages": d.get("messageCount"),
+                              "agents": [a["name"] for a in d.get("agents", [])]}, indent=2))
+            return
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
     try:
         with open(handshake_path()) as fh:
+            print("(server not responding; stale handshake follows)", file=sys.stderr)
             print(fh.read())
     except OSError:
-        print("no bus running (no bus.json)", file=sys.stderr)
+        print(f"no bus on :{port}", file=sys.stderr)
         sys.exit(1)
 
 
-def stop(_args):
+def stop(args):
+    """Stop by port, not by handshake file.
+
+    The handshake lives in the repo the bus was started from, so looking it up
+    relative to the current directory misses a bus started anywhere else — and
+    the port stays held while `stop` reports success-ish nonsense.
+    """
+    port = getattr(args, "port", None) or int(os.environ.get("AGENT_BUS_PORT", 8477))
+    pids = []
     try:
-        with open(handshake_path()) as fh:
-            pid = json.load(fh)["pid"]
-        os.kill(pid, 15)
-        print(f"stopped {pid}")
-    except (OSError, ValueError, KeyError) as exc:
-        print(f"no bus to stop ({exc})", file=sys.stderr)
+        r = subprocess.run(["lsof", "-ti", f"tcp:{port}"],
+                           capture_output=True, text=True, timeout=10)
+        pids = [int(x) for x in r.stdout.split() if x.strip().isdigit()]
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+    if not pids:
+        print(f"no bus listening on :{port}")
         sys.exit(1)
+
+    for pid in pids:
+        try:
+            os.kill(pid, 15)
+            print(f"stopped {pid} (port {port})")
+        except OSError as exc:
+            print(f"could not stop {pid}: {exc}", file=sys.stderr)
+
+    try:
+        os.remove(handshake_path())
+    except OSError:
+        pass
 
 
 def main():
@@ -440,8 +490,10 @@ def main():
     # reachable over REST only. Pass --port 0 if you want ephemeral anyway.
     p.add_argument("--port", type=int, default=int(os.environ.get("AGENT_BUS_PORT", 8477)))
     p.set_defaults(func=serve)
-    sub.add_parser("info").set_defaults(func=info)
-    sub.add_parser("stop").set_defaults(func=stop)
+    p = sub.add_parser("info"); p.add_argument("--port", type=int, default=None)
+    p.set_defaults(func=info)
+    p = sub.add_parser("stop"); p.add_argument("--port", type=int, default=None)
+    p.set_defaults(func=stop)
     a = ap.parse_args()
     a.func(a)
 
