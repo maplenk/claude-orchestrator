@@ -31,13 +31,17 @@ the bare name, because it resolves role *files* rather than registered agent typ
 
 | harness | CLI | role arrives via |
 | --- | --- | --- |
-| codex | `codex exec` | `AGENTS.md` in the working directory |
-| grok | `grok -p` | `AGENTS.md` in the working directory |
+| codex | `codex exec` | `-c model_instructions_file=<path>` |
+| grok | `grok -p` | `--rules <text>` |
 | pi | `pi -p` | `--append-system-prompt` |
 
-Each model runs in the harness built for it, which knows its own limits and behaviour. The
-role reaches codex and grok through `AGENTS.md` — verified empirically: both read it and obey
-it. `run-role` writes the role body there and backs up any existing file first.
+Each model runs in the harness built for it, which knows its own limits and behaviour. Every
+one takes the role **by flag**, so nothing is written into the workspace.
+
+That last part matters more than it sounds. An earlier version wrote the role to `AGENTS.md`
+in the working directory — which both CLIs do read. But an untracked file makes
+`git worktree remove` refuse (`fatal: contains modified or untracked files`), so the tool
+would have broken the exact cleanup command it prints for you.
 
 This also keeps the orchestrator's `PreToolUse` guard out of the way entirely: a native CLI is
 not Claude Code, so no hook fires. Driving Claude Code as a proxy harness made every delegated

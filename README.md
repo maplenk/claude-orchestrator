@@ -74,8 +74,9 @@ transcript rather than hidden in a config flag.
 ```
 
 Each model runs in **its own harness** — `codex exec`, `grok -p`, `pi -p` — never Claude Code
-wearing another model's name. The role reaches codex and grok through `AGENTS.md` in the
-working directory, which both CLIs read; pi takes `--append-system-prompt`.
+wearing another model's name. Every one takes the role by flag
+(`-c model_instructions_file=`, `--rules`, `--append-system-prompt`), so nothing is written
+into your workspace and worktrees stay cleanly removable.
 
 Roles resolve from your own `~/.claude/agents/` first and fall back to the plugin's, so you can
 override a packaged role without editing the plugin.

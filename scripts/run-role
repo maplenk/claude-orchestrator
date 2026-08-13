@@ -92,16 +92,13 @@ fi
 # writing anything.
 export ORCHESTRATOR_DELEGATE="$ROLE"
 
-# Native CLIs take their instructions from AGENTS.md in the working directory —
-# verified against both codex and grok. This is how the role reaches a harness
-# that is not Claude Code and has no --append-system-prompt.
-install_role_file() {
-  local dir="$1"
-  if [[ -f "$dir/AGENTS.md" && ! -f "$dir/.orchestrator-agents-backup" ]]; then
-    cp "$dir/AGENTS.md" "$dir/.orchestrator-agents-backup"
-  fi
-  printf '%s\n' "$ROLE_BODY" > "$dir/AGENTS.md"
-}
+# Every native CLI accepts the role by flag, so nothing is written into the
+# workspace. An instruction file left in a worktree makes `git worktree remove`
+# refuse ("contains modified or untracked files") — the very command this script
+# prints for you.
+ROLE_FILE_TMP="$(mktemp -t orchestrator-role)"
+printf '%s\n' "$ROLE_BODY" > "$ROLE_FILE_TMP"
+trap 'rm -f "$ROLE_FILE_TMP"' EXIT
 
 echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 
@@ -201,20 +198,20 @@ run_harness() {
 
 case "$HARNESS" in
   codex)
-    # Native codex CLI. Role arrives via AGENTS.md; model/effort come from
+    # Native codex CLI. Role arrives by config flag; model/effort come from
     # ~/.codex/config.toml unless pinned here.
-    install_role_file "$PWD"
-    CODEX_ARGS=(exec --skip-git-repo-check)
+    # -c model_instructions_file=<path> — verified against codex exec
+    CODEX_ARGS=(exec --skip-git-repo-check -c "model_instructions_file=$ROLE_FILE_TMP")
     [[ -n "$MODEL" ]] && CODEX_ARGS+=(-c "model=\"$MODEL\"")
     [[ $READONLY -eq 1 ]] && CODEX_ARGS+=(-c 'sandbox_permissions=["disk-full-read-access"]')
     run_harness codex "${CODEX_ARGS[@]}" "$BRIEF"
     ;;
   grok)
-    # Native grok CLI. Role arrives via AGENTS.md; the default model and
+    # Native grok CLI. Role arrives via --rules; the default model and
     # reasoning effort come from ~/.grok/config.toml unless pinned here.
-    install_role_file "$PWD"
-    GROK_ARGS=(-p)
-    [[ -n "$MODEL" ]] && GROK_ARGS=(--model "$MODEL" -p)
+    # --rules takes the role text directly — verified against grok -p
+    GROK_ARGS=(--rules "$ROLE_BODY" -p)
+    [[ -n "$MODEL" ]] && GROK_ARGS=(--model "$MODEL" --rules "$ROLE_BODY" -p)
     run_harness grok "${GROK_ARGS[@]}" "$BRIEF"
     ;;
   pi)
