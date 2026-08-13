@@ -1,2 +1,4 @@
 .DS_Store
 *.bak
+# runtime state written by agent-bus when the plugin runs from its own repo
+.claude/orchestrator/

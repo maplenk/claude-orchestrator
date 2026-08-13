@@ -12,7 +12,7 @@ PORT="${AGENT_BUS_PORT:-8477}"
 
 mkdir -p "$BIN" 2>/dev/null || exit 0
 
-for tool in run-role agent-bus agent-board orchestrator-harnesses; do
+for tool in run-role agent-bus agent-board orchestrator-harnesses orchestrator-doctor; do
   src="$ROOT/scripts/$tool"
   dst="$BIN/$tool"
   [ -x "$src" ] || continue

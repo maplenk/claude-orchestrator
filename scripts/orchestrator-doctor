@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Check that everything the orchestrator plugin needs is present and wired.
+
+    orchestrator-doctor           # table, exit 1 if anything required is broken
+    orchestrator-doctor --json    # machine-readable, for the setup UI
+
+Every failing check carries the exact command that fixes it. Optional checks
+never fail the run — you can use the plugin with only the `claude` harness.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+CLAUDE = os.path.join(HOME, ".claude")
+BUS_PORT = os.environ.get("AGENT_BUS_PORT", "8477")
+CLIPROXY = os.environ.get("CLIPROXY_BASE_URL", "http://127.0.0.1:8317")
+TOOLS = ("run-role", "agent-bus", "agent-board", "orchestrator-harnesses")
+
+OK, WARN, FAIL = "ok", "warn", "fail"
+results = []
+
+
+def check(name, status, detail, fix=None, required=True):
+    results.append({"name": name, "status": status, "detail": detail,
+                    "fix": fix, "required": required})
+
+
+def sh(cmd, timeout=10):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+
+
+def read_json(path):
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+# ---------------------------------------------------------------- runtime
+
+for binary, label, required in (("python3", "Python 3", True),
+                                ("curl", "curl", True),
+                                ("node", "Node.js", False),
+                                ("git", "git", True)):
+    path = shutil.which(binary)
+    check(label, OK if path else (FAIL if required else WARN),
+          path or "not on PATH",
+          None if path else f"install {binary}", required)
+
+
+# ---------------------------------------------------------------- plugin
+
+installed = (read_json(os.path.join(CLAUDE, "plugins", "installed_plugins.json")) or {}).get("plugins", {})
+names = {k.split("@")[0] for k in installed}
+
+check("orchestrator plugin", OK if "orchestrator" in names else FAIL,
+      "installed" if "orchestrator" in names else "not installed",
+      "/plugin marketplace add ~/Documents/claude-orchestrator "
+      "&& /plugin install orchestrator@orchestrator-marketplace")
+
+for plug, repo, market in (("codex", "openai/codex-plugin-cc", "openai-codex"),
+                           ("grok-build", "xai-org/grok-build-plugin-cc", "xai-grok-build"),
+                           ("pi", "Agents365-ai/pi-plugin-cc", "agents365-pi")):
+    present = plug in names
+    check(f"{plug} plugin", OK if present else WARN,
+          "installed" if present else "not installed (optional)",
+          None if present else f"/plugin marketplace add {repo} && /plugin install {plug}@{market}",
+          required=False)
+
+# Manifests that declare the auto-loaded hooks file fail to load entirely.
+import glob
+conflicts = []
+for man in glob.glob(os.path.join(CLAUDE, "plugins", "cache", "*", "*", "*", ".claude-plugin", "plugin.json")):
+    d = read_json(man) or {}
+    root = os.path.dirname(os.path.dirname(man))
+    if d.get("hooks") == "./hooks/hooks.json" and os.path.exists(os.path.join(root, "hooks", "hooks.json")):
+        conflicts.append(d.get("name") or os.path.basename(root))
+check("plugin hook manifests", OK if not conflicts else WARN,
+      "no duplicate-hooks conflicts" if not conflicts
+      else f"hooks will not load for: {', '.join(sorted(set(conflicts)))}",
+      None if not conflicts else
+      'remove the "hooks" key from that plugin\'s .claude-plugin/plugin.json '
+      "(hooks/hooks.json is auto-loaded)",
+      required=False)
+
+
+# ---------------------------------------------------------------- wiring
+
+missing = [t for t in TOOLS if not os.path.exists(os.path.join(CLAUDE, "bin", t))]
+check("tools on ~/.claude/bin", OK if not missing else FAIL,
+      "all four linked" if not missing else f"missing: {', '.join(missing)}",
+      "start a new Claude Code session (the SessionStart hook links them)")
+
+style = None
+for p in (os.path.join(os.getcwd(), ".claude", "settings.local.json"),
+          os.path.join(os.getcwd(), ".claude", "settings.json"),
+          os.path.join(CLAUDE, "settings.json")):
+    style = (read_json(p) or {}).get("outputStyle")
+    if style:
+        break
+check("Orchestrator output style", OK if style == "Orchestrator" else WARN,
+      f"current: {style or 'Default'}",
+      None if style == "Orchestrator" else "/config -> Output style -> Orchestrator",
+      required=False)
+
+registry = read_json(os.path.join(CLAUDE, "orchestrator", "harnesses.json"))
+check("harness registry", OK if registry else WARN,
+      f"{len(registry.get('harnesses', {}))} harnesses on record" if registry else "not created yet",
+      None if registry else "~/.claude/bin/orchestrator-harnesses",
+      required=False)
+
+
+# ---------------------------------------------------------------- bus
+
+rc, _ = sh(["curl", "-fsS", "-m", "2", f"http://127.0.0.1:{BUS_PORT}/health"])
+check("agent bus", OK if rc == 0 else WARN,
+      f"listening on 127.0.0.1:{BUS_PORT}" if rc == 0 else "not running",
+      None if rc == 0 else "starts automatically on session start, or: agent-bus serve",
+      required=False)
+
+rc, out = sh(["claude", "mcp", "list"], timeout=20)
+registered = "agent-bus" in out
+check("agent bus registered as MCP", OK if registered else WARN,
+      "registered" if registered else "not registered (REST still works)",
+      None if registered else
+      f"claude mcp add agent-bus --transport http http://127.0.0.1:{BUS_PORT}/mcp",
+      required=False)
+
+
+# ---------------------------------------------------------------- harnesses
+
+usable = ["claude"]
+
+key = os.path.join(CLAUDE, "cliproxy.key")
+runner = os.path.join(CLAUDE, "bin", "cliproxy-run")
+if os.path.isfile(key) and os.path.isfile(runner):
+    with open(key) as fh:
+        rc, out = sh(["curl", "-fsS", "-m", "5", f"{CLIPROXY}/v1/models",
+                      "-H", f"Authorization: Bearer {fh.read().strip()}"])
+    try:
+        models = {m["id"] for m in json.loads(out).get("data", [])} if rc == 0 else set()
+    except (ValueError, KeyError, TypeError):
+        models = set()
+    for h, prefix in (("codex", "gpt-"), ("grok", "grok-")):
+        found = [m for m in models if m.startswith(prefix)]
+        if found:
+            usable.append(h)
+        check(f"harness: {h}", OK if found else WARN,
+              f"{len(found)} model(s) via CLIProxyAPI" if found
+              else f"CLIProxyAPI unreachable at {CLIPROXY}",
+              None if found else "brew services start cliproxyapi", required=False)
+else:
+    for h in ("codex", "grok"):
+        check(f"harness: {h}", WARN, "cliproxy-run or cliproxy.key missing",
+              "set up CLIProxyAPI, or use the /codex: and /grok-build: plugins instead",
+              required=False)
+
+if shutil.which("pi"):
+    providers = list((read_json(os.path.join(HOME, ".pi", "agent", "auth.json")) or {}).keys())
+    if providers:
+        usable.append("pi")
+    check("harness: pi", OK if providers else WARN,
+          f"providers: {', '.join(providers)}" if providers else "installed, no credentials",
+          None if providers else "pi auth --provider <name>", required=False)
+else:
+    check("harness: pi", WARN, "pi not on PATH",
+          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent", required=False)
+
+check("harness: claude", OK, "built in", required=False)
+check("usable harnesses", OK, ", ".join(usable))
+
+
+# ---------------------------------------------------------------- report
+
+def main():
+    broken = [r for r in results if r["required"] and r["status"] == FAIL]
+    if "--json" in sys.argv:
+        json.dump({"ok": not broken, "usableHarnesses": usable, "checks": results},
+                  sys.stdout, indent=2)
+        print()
+        return 1 if broken else 0
+
+    mark = {OK: "  OK ", WARN: "  -- ", FAIL: " FAIL"}
+    print()
+    for r in results:
+        print(f"{mark[r['status']]}  {r['name']:<30} {r['detail']}")
+        if r["fix"] and r["status"] != OK:
+            print(f"         -> {r['fix']}")
+    print()
+    if broken:
+        print(f"{len(broken)} required check(s) failing.")
+    else:
+        warns = sum(1 for r in results if r["status"] == WARN)
+        print("Ready." + (f" {warns} optional item(s) not configured." if warns else ""))
+    return 1 if broken else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

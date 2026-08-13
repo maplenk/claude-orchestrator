@@ -1,0 +1,298 @@
+<title>Orchestrator Setup</title>
+<style>
+:root {
+  --paper:#FBFAF8; --panel:#FFFFFF; --sunk:#F2F1ED;
+  --ink:#15181F; --ink-2:#454B58; --ink-3:#6E7585;
+  --rule:#DFDDD6; --rule-2:#EAE8E2;
+  --accent:#2D5BD1; --accent-soft:#E8EDFB;
+  --ok:#1B7A4B; --ok-soft:#E4F2EA;
+  --warn:#9A6B08; --warn-soft:#F8EFDC;
+  --bad:#B23A2E; --bad-soft:#FAE8E5;
+  --shadow:0 1px 2px rgba(20,24,35,.05), 0 8px 24px -16px rgba(20,24,35,.25);
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#11141B; --panel:#171B24; --sunk:#1D222C;
+    --ink:#E9EAEE; --ink-2:#A8AEBC; --ink-3:#767D8D;
+    --rule:#282E39; --rule-2:#20252F;
+    --accent:#7BA4FF; --accent-soft:#1B2437;
+    --ok:#5FD39B; --ok-soft:#14261E;
+    --warn:#E0B457; --warn-soft:#2A2214;
+    --bad:#FF8A78; --bad-soft:#2E1A18;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11141B; --panel:#171B24; --sunk:#1D222C;
+  --ink:#E9EAEE; --ink-2:#A8AEBC; --ink-3:#767D8D;
+  --rule:#282E39; --rule-2:#20252F;
+  --accent:#7BA4FF; --accent-soft:#1B2437;
+  --ok:#5FD39B; --ok-soft:#14261E;
+  --warn:#E0B457; --warn-soft:#2A2214;
+  --bad:#FF8A78; --bad-soft:#2E1A18;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:820px; margin:0 auto; padding:0 24px 96px}
+
+/* masthead */
+header{border-bottom:1px solid var(--rule); margin-bottom:44px; padding:56px 0 28px}
+.eyebrow{
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 0 14px
+}
+h1{
+  font-size:40px; line-height:1.08; letter-spacing:-.025em; font-weight:700;
+  margin:0 0 14px; text-wrap:balance
+}
+.thesis{font-size:18px; color:var(--ink-2); margin:0; max-width:62ch; text-wrap:pretty}
+.meta{
+  display:flex; flex-wrap:wrap; gap:8px; margin-top:22px;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-3)
+}
+.meta span{border:1px solid var(--rule); border-radius:3px; padding:3px 8px}
+
+section{margin-bottom:52px}
+h2{
+  font-size:13px; font-family:var(--mono); letter-spacing:.12em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; margin:0 0 18px;
+  padding-bottom:9px; border-bottom:1px solid var(--rule-2)
+}
+h3{font-size:17px; letter-spacing:-.01em; margin:30px 0 8px; font-weight:650}
+p{margin:0 0 14px; max-width:68ch; text-wrap:pretty}
+.lede{color:var(--ink-2)}
+a{color:var(--accent); text-decoration-thickness:1px; text-underline-offset:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:2px}
+code{font-family:var(--mono); font-size:.87em; background:var(--sunk); padding:1.5px 5px; border-radius:3px}
+strong{font-weight:650}
+
+/* command blocks */
+pre{
+  font-family:var(--mono); font-size:13px; line-height:1.75;
+  background:var(--panel); color:var(--ink); border:1px solid var(--rule);
+  border-radius:6px; padding:14px 16px; margin:0 0 14px;
+  overflow-x:auto; box-shadow:var(--shadow)
+}
+pre .c{color:var(--ink-3)}
+pre .p{color:var(--accent)}
+
+/* install sequence — numbered because the order is load-bearing */
+ol.steps{list-style:none; counter-reset:s; margin:0; padding:0; display:flex; flex-direction:column; gap:26px}
+ol.steps>li{counter-increment:s; display:grid; grid-template-columns:34px 1fr; gap:16px}
+ol.steps>li::before{
+  content:counter(s,decimal-leading-zero);
+  font-family:var(--mono); font-size:12px; font-weight:600; color:var(--accent);
+  background:var(--accent-soft); border-radius:4px;
+  height:26px; display:flex; align-items:center; justify-content:center
+}
+ol.steps h3{margin:2px 0 8px; font-size:16px}
+.step-body>*:last-child{margin-bottom:0}
+
+/* status legend */
+.legend{display:flex; flex-direction:column; gap:10px; margin:0 0 18px}
+.legend div{display:grid; grid-template-columns:76px 1fr; gap:14px; align-items:baseline}
+.chip{
+  font-family:var(--mono); font-size:11px; font-weight:650; letter-spacing:.08em;
+  text-transform:uppercase; padding:3px 0; border-radius:3px; text-align:center;
+  border:1px solid transparent
+}
+.chip.ok{color:var(--ok); background:var(--ok-soft); border-color:var(--ok)}
+.chip.warn{color:var(--warn); background:var(--warn-soft); border-color:var(--warn)}
+.chip.bad{color:var(--bad); background:var(--bad-soft); border-color:var(--bad)}
+
+/* tables */
+.scroll{overflow-x:auto; margin:0 0 14px; border:1px solid var(--rule); border-radius:6px; box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; font-size:14px; background:var(--panel)}
+th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--rule-2); vertical-align:top}
+thead th{
+  font-family:var(--mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-3); font-weight:600; background:var(--sunk); white-space:nowrap
+}
+tbody tr:last-child td{border-bottom:0}
+td.mono,th.mono{font-family:var(--mono); font-size:12.5px; white-space:nowrap}
+.dash{color:var(--ink-3)}
+
+/* matrix */
+.matrix td:first-child{font-weight:600}
+.matrix td.cell{font-family:var(--mono); font-size:12px; color:var(--ink-2)}
+
+/* callout */
+.note{
+  border-left:2px solid var(--accent); background:var(--accent-soft);
+  padding:13px 16px; border-radius:0 5px 5px 0; margin:0 0 14px; font-size:14.5px
+}
+.note.warn{border-left-color:var(--warn); background:var(--warn-soft)}
+.note p{margin:0 0 8px; max-width:none}
+.note p:last-child{margin:0}
+
+details{border:1px solid var(--rule); border-radius:6px; padding:0; margin-bottom:10px; background:var(--panel)}
+summary{cursor:pointer; padding:12px 16px; font-weight:600; font-size:14.5px; list-style-position:inside}
+details[open] summary{border-bottom:1px solid var(--rule-2)}
+.details-body{padding:14px 16px 4px}
+.details-body>*:last-child{margin-bottom:14px}
+
+footer{border-top:1px solid var(--rule); padding-top:20px; font-size:13px; color:var(--ink-3)}
+@media (max-width:600px){
+  h1{font-size:30px} .wrap{padding:0 18px 64px} header{padding-top:38px}
+  ol.steps>li{grid-template-columns:28px 1fr; gap:12px}
+}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Claude Code plugin · v0.1.0</p>
+  <h1>Orchestrator Setup</h1>
+  <p class="thesis">A plan → delegate → verify workflow where implementation reaches the tree only through delegated agents, and roles run on whichever model you choose.</p>
+  <div class="meta">
+    <span>4 harnesses</span><span>3 roles</span><span>2 output styles</span><span>MIT</span>
+  </div>
+</header>
+
+<section>
+  <h2>What it is</h2>
+  <p class="lede">Two ideas do most of the work. <strong>Roles and harnesses are orthogonal</strong> — a role is the job, a harness is the model executing it, so one role definition runs on Claude, Codex, Grok or pi with no per-model copies. And <strong>the no-implement rule is enforced, not requested</strong> — a hook blocks source edits in the main session while orchestrator mode is on, so a wave can only reach the tree through an agent that was independently verified.</p>
+  <p class="lede">Nothing activates until you select the output style. Under any other style the guard, the workflow, and the harness prompt are all inert.</p>
+</section>
+
+<section>
+  <h2>Install</h2>
+  <p class="lede">Steps 1–3 are required. Step 4 is what turns the mode on.</p>
+  <ol class="steps">
+    <li><div class="step-body">
+      <h3>Add the marketplace and install</h3>
+      <pre><span class="p">/plugin</span> marketplace add ~/Documents/claude-orchestrator
+<span class="p">/plugin</span> install orchestrator@orchestrator-marketplace</pre>
+      <p>Type these — they're slash commands, not shell.</p>
+    </div></li>
+
+    <li><div class="step-body">
+      <h3>Restart the session</h3>
+      <p>A <code>SessionStart</code> hook symlinks the five tools into <code>~/.claude/bin/</code>. Plugin file bodies don't get <code>${CLAUDE_PLUGIN_ROOT}</code> expanded, so the role definitions need a stable path to point at. Until the hook has run, those paths don't exist.</p>
+    </div></li>
+
+    <li><div class="step-body">
+      <h3>Check the wiring</h3>
+      <pre><span class="p">/orchestrator:setup</span>
+<span class="c"># or directly:</span>
+~/.claude/bin/orchestrator-doctor</pre>
+      <p>Every non-passing check prints the exact command that fixes it.</p>
+    </div></li>
+
+    <li><div class="step-body">
+      <h3>Turn the mode on</h3>
+      <pre><span class="p">/config</span> → Output style → <span class="p">Orchestrator</span></pre>
+      <p>Then <code>/orchestrate &lt;goal&gt;</code>. Output style is read once at session start, so it takes effect on the next session or after <code>/clear</code>.</p>
+    </div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>Reading the doctor</h2>
+  <div class="legend">
+    <div><span class="chip ok">OK</span><span>Nothing to do.</span></div>
+    <div><span class="chip warn">— warn</span><span>Optional. Works without it, at reduced capability — usually one fewer model family to get a second opinion from.</span></div>
+    <div><span class="chip bad">FAIL</span><span>Required. Delegation or enforcement will not work correctly until fixed.</span></div>
+  </div>
+  <p>A first run typically shows two warnings: the output style not yet selected, and the bus not registered as an MCP server. Both are one command each.</p>
+</section>
+
+<section>
+  <h2>Harnesses</h2>
+  <p class="lede">Only <code>claude</code> is required. Each additional harness buys one more independent model family — which matters because re-delegating a failed task to the same model usually reproduces the same mistake.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Harness</th><th>Needs</th><th class="mono">Install</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">claude</td><td>Nothing — built in. The only harness with worktree isolation.</td><td class="dash">—</td></tr>
+      <tr><td class="mono">codex</td><td>CLIProxyAPI on :8317, plus <code>cliproxy.key</code></td><td class="mono">/plugin install codex@openai-codex</td></tr>
+      <tr><td class="mono">grok</td><td>Same proxy as codex</td><td class="mono">/plugin install grok-build@xai-grok-build</td></tr>
+      <tr><td class="mono">pi</td><td>pi CLI and one authenticated provider</td><td class="mono">npm i -g @earendil-works/pi-coding-agent</td></tr>
+    </tbody>
+  </table></div>
+  <p>The plugins are optional but worth having: they add background job control, review commands, and status/result/cancel. Use those for reviews; use <code>run-role</code> when you need one of <em>your</em> role definitions driving the model.</p>
+</section>
+
+<section>
+  <h2>Roles × harnesses</h2>
+  <p class="lede">Pick the role by what the task is, then the harness by which model should run it. A second independent attempt is the same role on a different harness — never a different role.</p>
+  <div class="scroll"><table class="matrix">
+    <thead><tr><th>Role</th><th>Job</th><th>On claude</th><th>Elsewhere</th></tr></thead>
+    <tbody>
+      <tr><td>developer</td><td>Scoped implementor</td><td class="cell">Agent(orchestrator:developer)</td><td class="cell">run-role developer --harness X</td></tr>
+      <tr><td>ui-developer</td><td>Front-end, a11y, design system</td><td class="cell">Agent(orchestrator:ui-developer)</td><td class="cell">run-role ui-developer --harness X</td></tr>
+      <tr><td>verifier</td><td>Evidence-driven check</td><td class="cell">Agent(orchestrator:verifier)</td><td class="cell">run-role verifier --harness X --read-only</td></tr>
+    </tbody>
+  </table></div>
+  <p>Plugin agents are namespaced, so the Agent tool needs <code>orchestrator:&lt;role&gt;</code>. <code>run-role</code> takes the bare name — it resolves role <em>files</em>, not registered agent types, and checks your own <code>~/.claude/agents/</code> first so you can override a packaged role without editing the plugin.</p>
+  <p>Model choice belongs to the role × harness pair. <code>harnesses.json</code> takes a <code>modelByRole</code> map — pi runs Kimi for <code>ui-developer</code> and DeepSeek for everything else.</p>
+</section>
+
+<section>
+  <h2>Messaging</h2>
+  <p class="lede"><code>SendMessage</code> reaches Claude agents only. Codex, grok and pi are headless CLI processes with no mailbox — messages to them vanish with no error. So the plugin ships a bus that both sides can reach.</p>
+  <pre>claude mcp add agent-bus --transport http http://127.0.0.1:8477/mcp</pre>
+  <p>Claude agents get <code>chat_register</code>, <code>chat_send</code>, <code>chat_read</code>, <code>chat_wait</code>, <code>chat_who</code>. Headless harnesses use the same operations over REST on the same port. Both write one JSONL log per branch, readable with <code>agent-board</code> whether or not the server is up.</p>
+  <div class="note">
+    <p><strong>Register it before you need it.</strong> MCP servers connect at session start. A bus started mid-session is reachable over REST only — which is why the port is fixed rather than ephemeral.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Configuration</h2>
+  <div class="scroll"><table>
+    <thead><tr><th class="mono">Path or variable</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">~/.claude/orchestrator/harnesses.json</td><td>Harness registry. Your <code>default</code>, <code>model</code>, <code>modelByRole</code> and <code>askPerWave</code> edits survive re-probing.</td></tr>
+      <tr><td class="mono">.claude/orchestrator/board/&lt;branch&gt;.jsonl</td><td>Message log, gitignored, one channel per branch.</td></tr>
+      <tr><td class="mono">docs/specs/&lt;slug&gt;.md</td><td>The spec — the durable record, and one of two paths writable in orchestrator mode.</td></tr>
+      <tr><td class="mono">docs/reviews/</td><td>Saved review output. Local and disposable.</td></tr>
+      <tr><td class="mono">AGENT_BUS_PORT</td><td>Bus port. Default <code>8477</code>.</td></tr>
+      <tr><td class="mono">RUN_ROLE_THINKING</td><td>Thinking level for pi runs. Default <code>medium</code>.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>When something is wrong</h2>
+
+  <details><summary>A plugin installs but reports “couldn’t be loaded”</summary>
+  <div class="details-body">
+    <p>Check its <code>.claude-plugin/plugin.json</code> for <code>"hooks": "./hooks/hooks.json"</code>. That path is loaded automatically; naming it again makes the loader resolve the same file twice and reject the entire hooks block.</p>
+    <p>The plugin's skills and agents still load, so the failure is easy to miss — but none of its hooks run. Remove the key. The doctor flags this across every installed plugin.</p>
+  </div></details>
+
+  <details><summary>Edits to the repo don’t take effect</summary>
+  <div class="details-body">
+    <p>Installing from a local path <em>copies</em> the repo into the plugin cache, and <code>/reload-plugins</code> won't re-copy while the version is unchanged. Either bump <code>version</code> in <code>plugin.json</code>, or sync the cache directly:</p>
+    <pre>rsync -a --delete --exclude='.git' ~/Documents/claude-orchestrator/ \
+  ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/</pre>
+  </div></details>
+
+  <details><summary>The guard isn’t blocking edits</summary>
+  <div class="details-body">
+    <p>It only acts when the output style is exactly <code>Orchestrator</code>, and it deliberately ignores any tool call carrying an <code>agent_id</code> — subagents are the implementors and must be able to write.</p>
+    <p>Output style is read once at session start. If you just selected it, start a new session or <code>/clear</code>.</p>
+  </div></details>
+
+  <details><summary>A pi run takes minutes, or times out</summary>
+  <div class="details-body">
+    <p>Expected. Observed runs have exceeded four and seven minutes on small tasks. Delegate in the background rather than raising timeouts, and lower <code>RUN_ROLE_THINKING</code> if you need faster turnaround.</p>
+  </div></details>
+
+  <details><summary>An agent claims it messaged another and nothing arrived</summary>
+  <div class="details-body">
+    <p>Almost certainly <code>SendMessage</code> aimed at a headless harness. Use the bus. On the bus, identity is issued rather than claimed — <code>register</code> returns a token and the server stamps the sender itself, so a forged <code>from</code> field is ignored rather than trusted.</p>
+  </div></details>
+</section>
+
+<footer>
+  Roles adapted from the specialist model in AO / Intent, rebuilt on Claude Code primitives. Bus shaped by agentchattr, diverging where Claude Code's constraints differ.
+</footer>
+</div>
