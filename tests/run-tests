@@ -2,12 +2,14 @@
 """Regression tests for the orchestrator plugin. No dependencies, no network.
 
     tests/run-tests            # everything
-    tests/run-tests guard      # one suite: guard | bus | role
+    tests/run-tests guard      # one suite: guard | bus | role | runs
 
 Starts its own bus on a scratch port so it never touches a running one.
 """
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -220,6 +222,246 @@ def suite_bus():
         proc.wait(timeout=10)
 
 
+# ---------------------------------------------------------------- runs
+# Own suite, not an extension of bus: pause/resume spawn a child and must
+# tear it down even when an assertion fails. Mixing that into suite_bus
+# would leak a stopped process if an earlier bus check returned early.
+
+def _reap(proc):
+    if proc is None:
+        return
+    if proc.poll() is None:
+        try:
+            os.kill(proc.pid, signal.SIGCONT)
+        except OSError:
+            pass
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        proc.kill()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _file_size(path):
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
+
+
+def _wait_size(path, minimum, timeout=5.0):
+    deadline = time.time() + timeout
+    n = _file_size(path)
+    while time.time() < deadline:
+        n = _file_size(path)
+        if n >= minimum:
+            return n
+        time.sleep(0.05)
+    return n
+
+
+def suite_runs():
+    print("\nruns")
+    tmp = tempfile.mkdtemp()
+    subprocess.run(["git", "init", "-q"], cwd=tmp, timeout=20)
+    tick = os.path.join(tmp, "ticks")
+    children = []
+    proc = subprocess.Popen([sys.executable, BUS, "serve", "--port", str(PORT),
+                             "--session", "TEST"], cwd=tmp,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(50):
+            try:
+                api("/health", timeout=2)
+                break
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.2)
+        else:
+            ok("bus starts", False, "never became healthy")
+            return
+
+        ok("bus starts", True)
+
+        listed = api("/runs")
+        ok("GET /runs is empty before any open",
+           listed.get("ok") is True and listed.get("runs") == [],
+           str(listed))
+
+        # richer register must not weaken identity: token stamps `from`
+        a = api("/register", {"name": "orchestrator"})
+        b = api("/register", {"name": "developer", "role": "developer",
+                              "harness": "claude", "model": "opus"})
+        api("/send", {"token": b["token"], "to": "all", "msg": "hi",
+                      "from": "orchestrator"})
+        msgs = api("/read", {"token": a["token"]})["messages"]
+        ok("register extras do not let a claimed from win",
+           msgs[-1]["from"] == "developer", f"got {msgs[-1]['from']}")
+
+        opened = api("/runs", {"title": "wave-1 coverage", "role": "developer",
+                               "harness": "claude", "model": "opus"})
+        rid = opened.get("id")
+        run = opened.get("run") or {}
+        ok("POST /runs returns an id", bool(rid), str(opened))
+        ok("open records title/role/harness/model",
+           run.get("title") == "wave-1 coverage"
+           and run.get("role") == "developer"
+           and run.get("harness") == "claude"
+           and run.get("model") == "opus",
+           str(run))
+        ok("open state is running", run.get("state") == "running", str(run))
+
+        api(f"/runs/{rid}/stage", {"stage": "intent"})
+        api(f"/runs/{rid}/stage", {"stage": "implement", "note": "working"})
+        staged = api("/runs")["runs"][-1]
+        stages = staged.get("stages") or []
+        ok("stages accumulate in order",
+           [s.get("stage") for s in stages] == ["intent", "implement"]
+           and stages[1].get("note") == "working",
+           str(stages))
+        ok("stages carry ordered timestamps",
+           len(stages) == 2
+           and all(s.get("ts") for s in stages)
+           and stages[0]["ts"] <= stages[1]["ts"],
+           str(stages))
+
+        # no closed runs yet — a fraction, not a fabricated percentage
+        rate0 = api("/status?doctor=0")["successRate"]
+        ok("successRate is {complete, closed} before any close",
+           isinstance(rate0, dict)
+           and rate0.get("complete") == 0
+           and rate0.get("closed") == 0
+           and not isinstance(rate0, (int, float)),
+           str(rate0))
+
+        closed = api(f"/runs/{rid}/close", {"outcome": "complete", "exit_code": 0})
+        crun = closed.get("run") or {}
+        ok("close records outcome and exit code",
+           crun.get("outcome") == "complete"
+           and crun.get("state") == "complete"
+           and crun.get("exit_code") == 0,
+           str(crun))
+        ok("duration derives from opened/closed",
+           bool(crun.get("opened")) and bool(crun.get("closed"))
+           and crun["closed"] >= crun["opened"],
+           f"opened={crun.get('opened')} closed={crun.get('closed')}")
+
+        rate1 = api("/status?doctor=0")["successRate"]
+        ok("successRate counts a complete close as 1/1",
+           rate1 == {"complete": 1, "closed": 1}, str(rate1))
+
+        fail_id = api("/runs", {"title": "will fail"})["id"]
+        api(f"/runs/{fail_id}/close", {"outcome": "failed", "exit_code": 2})
+        rate2 = api("/status?doctor=0")["successRate"]
+        ok("successRate is a real fraction over closed runs",
+           rate2 == {"complete": 1, "closed": 2}, str(rate2))
+
+        s = api("/status?doctor=0")
+        missing = [k for k in ("ok", "session", "channel", "roles", "default",
+                               "harnesses", "doctor", "agents", "messageCount",
+                               "cursor") if k not in s]
+        ok("status keeps the existing contract", not missing, f"missing {missing}")
+        ok("status carries runs",
+           isinstance(s.get("runs"), dict)
+           and "counts" in s["runs"] and "open" in s["runs"],
+           str(s.get("runs")))
+        rich = next((x for x in s.get("agents") or []
+                     if x.get("name") == "developer"), None)
+        ok("status agents carry declared role/harness/model",
+           rich is not None
+           and rich.get("role") == "developer"
+           and rich.get("harness") == "claude"
+           and rich.get("model") == "opus"
+           and "idle_s" in rich,
+           str(rich))
+
+        # live child: append one byte, flush, sleep. SIGSTOP must freeze it.
+        child = subprocess.Popen(
+            [sys.executable, "-c",
+             "import os,sys,time\n"
+             "fd=os.open(sys.argv[1], os.O_WRONLY|os.O_CREAT|os.O_APPEND)\n"
+             "while True:\n"
+             "    os.write(fd, b'x')\n"
+             "    time.sleep(0.1)\n",
+             tick],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True)
+        children.append(child)
+
+        live = api("/runs", {"title": "ticker", "pid": child.pid})
+        lid = live.get("id")
+        grew = _wait_size(tick, 2)
+        ok("ticker is writing", grew >= 2, f"size {grew}")
+
+        # urllib sends GET when there is no body — that must not pause
+        get_code = None
+        try:
+            sneak = api(f"/runs/{lid}/pause")
+            get_detail = f"GET returned 200 {sneak}"
+        except urllib.error.HTTPError as exc:
+            get_code = exc.code
+            get_detail = f"HTTP {exc.code}"
+        ok("GET /runs/<id>/pause does not succeed",
+           get_code == 404, get_detail)
+        after_get = _wait_size(tick, grew + 1)
+        ok("GET pause does not freeze the process",
+           after_get > grew, f"{grew} -> {after_get}")
+
+        paused = api(f"/runs/{lid}/pause", {})
+        ok("POST pause records paused",
+           paused.get("ok") is True
+           and (paused.get("run") or {}).get("state") == "paused",
+           str(paused))
+        frozen = _file_size(tick)
+        samples = []
+        for _ in range(6):
+            samples.append(_file_size(tick))
+            time.sleep(0.1)
+        ok("pause freezes the process",
+           len(set(samples)) == 1 and samples[0] == frozen,
+           f"sizes {samples}")
+
+        resumed = api(f"/runs/{lid}/resume", {})
+        ok("POST resume records running",
+           resumed.get("ok") is True
+           and (resumed.get("run") or {}).get("state") == "running",
+           str(resumed))
+        unfrozen = _wait_size(tick, frozen + 1)
+        ok("resume unfreezes the process",
+           unfrozen > frozen, f"{frozen} -> {unfrozen}")
+
+        rate_open = api("/status?doctor=0")["successRate"]
+        ok("successRate ignores still-open runs",
+           rate_open == {"complete": 1, "closed": 2}, str(rate_open))
+        api(f"/runs/{lid}/close", {"outcome": "complete", "exit_code": 0})
+
+        # a reaped pid must not crash the server or flip state
+        dead = subprocess.Popen([sys.executable, "-c", "pass"])
+        dead.wait(timeout=10)
+        gone = api("/runs", {"title": "already dead", "pid": dead.pid})
+        gid = gone.get("id")
+        bad = api(f"/runs/{gid}/pause", {})
+        ok("dead pid returns a clean error",
+           "error" in bad and bad.get("ok") is not True, str(bad))
+        gone_run = next((r for r in api("/runs")["runs"] if r.get("id") == gid),
+                        {})
+        ok("dead pid does not flip run state",
+           gone_run.get("state") == "running", str(gone_run))
+        health = api("/health")
+        ok("server answers /health after a dead pid",
+           health.get("ok") is True, str(health))
+    finally:
+        for child in children:
+            _reap(child)
+        _reap(proc)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------- run-role
 
 def suite_role():
@@ -280,9 +522,13 @@ def suite_role():
         ok(f"{role} has a body after frontmatter", len(body) > 400, f"{len(body)} chars")
 
 
-SUITES = {"guard": suite_guard, "bus": suite_bus, "role": suite_role}
+SUITES = {"guard": suite_guard, "bus": suite_bus, "runs": suite_runs,
+          "role": suite_role}
 
 if __name__ == "__main__":
+    # a live orchestrator session exports these; they must not leak into the suite
+    os.environ.pop("ORCHESTRATOR_DELEGATE", None)
+    os.environ.pop("ORCHESTRATOR_COMMIT", None)
     which = sys.argv[1:] or list(SUITES)
     for name in which:
         if name not in SUITES:
