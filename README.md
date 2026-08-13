@@ -126,6 +126,45 @@ rsync -a --delete --exclude='.git' ./ \
 Do not declare `"hooks": "./hooks/hooks.json"` in `plugin.json` — that path is auto-loaded, and
 naming it again fails the whole hooks block with "Duplicate hooks file detected".
 
+## What this plugin does to your machine
+
+Stated plainly, because two of these are unusual for a plugin and you should know before
+installing.
+
+**Hooks it registers**
+
+| Hook | Fires | What it does |
+| --- | --- | --- |
+| `SessionStart` | once per session start | Symlinks five scripts into `~/.claude/bin/`, then starts the message bus if nothing already holds its port. |
+| `PreToolUse` | every `Edit`, `Write`, `NotebookEdit`, `Bash` call | Reads the tool's arguments to decide whether to block it. Returns immediately unless the `Orchestrator` output style is active. |
+
+The `PreToolUse` hook is deliberately broad — blocking source edits is the plugin's whole
+purpose, and a narrower matcher could not enforce it. It is gated three ways: it exits
+immediately unless `outputStyle` is exactly `Orchestrator`, it ignores any event carrying an
+`agent_id` (subagents must be able to write), and it only ever *denies* — it cannot modify a
+call. [Read it](hooks/orchestrator-guard.py); it is ~170 lines with no network access.
+
+**It writes outside the plugin directory**
+
+- `~/.claude/bin/` — five symlinks, and only if the name is free or already points at this
+  plugin. A real file there is never replaced.
+- `~/.claude/orchestrator/harnesses.json` — your harness registry.
+- `.claude/orchestrator/` in the working repo — bus handshake and message log, self-gitignored.
+
+**It runs a local server**
+
+`agent-bus` binds `127.0.0.1:8477` and stays up for the session. It is bound to loopback only.
+Set `AGENT_BUS_PORT` to move it; kill it with `agent-bus stop` or by port.
+
+**Network**
+
+No outbound internet calls. The plugin's own code talks only to `127.0.0.1` — its bus, and
+CLIProxyAPI's model list when probing harness availability. `run-role` shells out to `claude`
+or `pi`, which make their own provider calls under your existing credentials; the plugin does
+not read, store, or forward those credentials.
+
+**No telemetry.** Nothing is collected or sent anywhere.
+
 ## Configuration
 
 | Path | What |
