@@ -1,0 +1,16 @@
+{
+  "name": "orchestrator",
+  "version": "0.1.0",
+  "description": "Plan → delegate → verify workflow for Claude Code. Roles and harnesses as orthogonal axes: run any role on Claude, Codex, Grok or pi, with an enforced no-implement mode and a cross-harness message bus.",
+  "author": {
+    "name": "naman"
+  },
+  "keywords": [
+    "orchestration",
+    "subagents",
+    "multi-model",
+    "code-review",
+    "delegation"
+  ],
+  "hooks": "./hooks/hooks.json"
+}

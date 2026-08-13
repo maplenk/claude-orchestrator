@@ -1,0 +1,29 @@
+{
+  "description": "Links plugin tools onto a stable path, starts the message bus, and enforces the Orchestrator output style's no-implement rule.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/orchestrator-guard.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

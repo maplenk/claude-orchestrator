@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Shared append-only message board for orchestrator / implementor / verifier.
+
+Claude Code's SendMessage is point-to-point and only reaches Claude agents.
+Headless harnesses (codex, grok, pi) have no mailbox at all — but they do have
+bash. This board is the channel every role can reach, and the only durable
+record of what was decided while a wave ran.
+
+    agent-board post --from developer --to orchestrator "wave 1 done, 2 tests red"
+    agent-board post --from orchestrator --to all --topic scope "auth.php is off-limits"
+    agent-board read                       # everything on this channel
+    agent-board read --to verifier --unread-for verifier
+    agent-board read --since 5             # last 5 entries
+    agent-board watch --for developer      # block until a new message arrives
+
+Channel defaults to the current git branch, so parallel waves stay separate.
+Storage: .claude/orchestrator/board/<channel>.jsonl in the repo, gitignored.
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+
+ROLES = ("orchestrator", "developer", "ui-developer", "verifier", "all")
+
+
+def repo_root():
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.getcwd()
+
+
+def default_channel():
+    try:
+        out = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, timeout=5,
+        )
+        name = out.stdout.strip()
+        if name:
+            return name.replace("/", "-")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "default"
+
+
+def board_path(channel):
+    d = os.path.join(repo_root(), ".claude", "orchestrator", "board")
+    os.makedirs(d, exist_ok=True)
+    gitignore = os.path.join(d, ".gitignore")
+    if not os.path.exists(gitignore):
+        with open(gitignore, "w") as fh:
+            fh.write("*\n!.gitignore\n")
+    return os.path.join(d, f"{channel}.jsonl")
+
+
+def read_all(path):
+    entries = []
+    try:
+        with open(path) as fh:
+            for i, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                    e["_n"] = i
+                    entries.append(e)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return entries
+
+
+def cmd_post(args):
+    path = board_path(args.channel)
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "from": args.sender,
+        "to": args.to,
+        "topic": args.topic,
+        "msg": " ".join(args.message).strip(),
+    }
+    # O_APPEND writes under PIPE_BUF are atomic; concurrent agents cannot interleave.
+    with open(path, "a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+    print(f"posted to {args.channel}: {entry['from']} -> {entry['to']}")
+
+
+def cmd_read(args):
+    path = board_path(args.channel)
+    entries = read_all(path)
+
+    if args.sender:
+        entries = [e for e in entries if e.get("from") == args.sender]
+    if args.to:
+        entries = [e for e in entries if e.get("to") in (args.to, "all")]
+    if args.topic:
+        entries = [e for e in entries if e.get("topic") == args.topic]
+    if args.since:
+        entries = entries[-args.since:]
+
+    if args.json:
+        for e in entries:
+            e.pop("_n", None)
+        json.dump(entries, sys.stdout, indent=2)
+        print()
+        return 0
+
+    if not entries:
+        print(f"(no messages on {args.channel})")
+        return 0
+
+    for e in entries:
+        topic = f" [{e['topic']}]" if e.get("topic") else ""
+        print(f"#{e['_n']:<3} {e.get('ts', '')}  {e.get('from')} → {e.get('to')}{topic}")
+        for line in (e.get("msg") or "").splitlines() or [""]:
+            print(f"      {line}")
+    return 0
+
+
+def cmd_watch(args):
+    path = board_path(args.channel)
+    seen = len(read_all(path))
+    deadline = time.time() + args.timeout
+    while time.time() < deadline:
+        entries = read_all(path)
+        fresh = [
+            e for e in entries[seen:]
+            if not args.for_role or e.get("to") in (args.for_role, "all")
+        ]
+        if fresh:
+            for e in fresh:
+                topic = f" [{e['topic']}]" if e.get("topic") else ""
+                print(f"#{e['_n']} {e.get('from')} → {e.get('to')}{topic}: {e.get('msg')}")
+            return 0
+        seen = len(entries)
+        time.sleep(args.interval)
+    print(f"(nothing for {args.for_role or 'anyone'} within {args.timeout}s)")
+    return 1
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="agent-board", description=__doc__)
+    ap.add_argument("--channel", default=None, help="default: current git branch")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("post")
+    p.add_argument("--from", dest="sender", required=True)
+    p.add_argument("--to", default="all", help=f"one of {', '.join(ROLES)} or an agent name")
+    p.add_argument("--topic", default=None)
+    p.add_argument("message", nargs="+")
+    p.set_defaults(func=cmd_post)
+
+    p = sub.add_parser("read")
+    p.add_argument("--from", dest="sender", default=None)
+    p.add_argument("--to", default=None, help="includes messages addressed to 'all'")
+    p.add_argument("--topic", default=None)
+    p.add_argument("--since", type=int, default=None, help="last N entries")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_read)
+
+    p = sub.add_parser("watch")
+    p.add_argument("--for", dest="for_role", default=None)
+    p.add_argument("--timeout", type=int, default=300)
+    p.add_argument("--interval", type=int, default=3)
+    p.set_defaults(func=cmd_watch)
+
+    args = ap.parse_args()
+    if not args.channel:
+        args.channel = default_channel()
+    sys.exit(args.func(args) or 0)
+
+
+if __name__ == "__main__":
+    main()

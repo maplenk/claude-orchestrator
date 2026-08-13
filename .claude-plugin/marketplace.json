@@ -1,0 +1,13 @@
+{
+  "name": "orchestrator-marketplace",
+  "owner": {
+    "name": "naman"
+  },
+  "plugins": [
+    {
+      "name": "orchestrator",
+      "source": "./",
+      "description": "Plan → delegate → verify workflow with roles, multi-harness delegation, and an enforced no-implement mode."
+    }
+  ]
+}

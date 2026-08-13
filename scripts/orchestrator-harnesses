@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""Detect which implementor harnesses are usable, and maintain the registry.
+
+    orchestrator-harnesses            # probe, update availability, print table
+    orchestrator-harnesses --json     # same, but emit the merged registry
+    orchestrator-harnesses --no-probe # print what is on record, probing nothing
+
+The registry lives at ~/.claude/orchestrator/harnesses.json. Your own edits to
+`default`, `model`, `askPerWave` and `notes` are preserved across probes; only
+`available` and `detail` are overwritten.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+REGISTRY = os.path.join(HOME, ".claude", "orchestrator", "harnesses.json")
+CLIPROXY_RUN = os.path.join(HOME, ".claude", "bin", "cliproxy-run")
+CLIPROXY_KEY = os.path.join(HOME, ".claude", "cliproxy.key")
+CLIPROXY_URL = os.environ.get("CLIPROXY_BASE_URL", "http://127.0.0.1:8317")
+
+SEED = {
+    "version": 1,
+    "default": "claude",
+    "askPerWave": True,
+    "roles": ["developer", "ui-developer", "verifier"],
+    "harnesses": {
+        "claude": {
+            "label": "Claude — in-process subagent",
+            "runner": "Agent(subagent_type: <role>)",
+            "plugin": None,
+            "model": None,
+            "notes": "Fastest to start, shares repo context loading, supports worktree isolation.",
+        },
+        "codex": {
+            "label": "Codex — GPT-5.6 via CLIProxyAPI",
+            "runner": "run-role <role> --harness codex",
+            "plugin": "/codex:* (openai/codex-plugin-cc)",
+            "model": "gpt-5.6-sol",
+            "notes": "Strongest independent reviewer. Pin the model; effort comes from ~/.codex/config.toml.",
+        },
+        "grok": {
+            "label": "Grok — xAI via CLIProxyAPI",
+            "runner": "run-role <role> --harness grok",
+            "plugin": "/grok-build:* (xai-org/grok-build-plugin-cc)",
+            "model": "grok-4.5",
+            "notes": "Good contrast to Codex on the same task.",
+        },
+        "pi": {
+            "label": "pi — Kimi/Qwen/DeepSeek/MiniMax via commandcode",
+            "runner": "run-role <role> --harness pi",
+            "plugin": "/pi:* (Agents365-ai/pi-plugin-cc)",
+            "model": "deepseek/deepseek-v4-pro",
+            "modelByRole": {
+                "ui-developer": "moonshotai/Kimi-K3",
+                "developer": "deepseek/deepseek-v4-pro",
+                "verifier": "deepseek/deepseek-v4-pro",
+            },
+            "notes": "Reaches model families the others cannot. Kimi for UI, DeepSeek for reasoning. --tools read is the strict read-only flag.",
+        },
+    },
+}
+
+PRESERVE = ("model", "modelByRole", "notes", "runner", "plugin", "label")
+
+
+def run(cmd, timeout=10):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout + p.stderr
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+
+
+def proxy_models():
+    if not (os.path.isfile(CLIPROXY_RUN) and os.path.isfile(CLIPROXY_KEY)):
+        return None
+    try:
+        with open(CLIPROXY_KEY) as fh:
+            key = fh.read().strip()
+    except OSError:
+        return None
+    rc, out = run(
+        ["curl", "-fsS", "-m", "5", f"{CLIPROXY_URL}/v1/models",
+         "-H", f"Authorization: Bearer {key}"]
+    )
+    if rc != 0:
+        return None
+    try:
+        return {m["id"] for m in json.loads(out).get("data", [])}
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def probe(registry):
+    models = proxy_models()
+
+    for name, cfg in registry["harnesses"].items():
+        if name == "claude":
+            cfg["available"] = True
+            cfg["detail"] = "built in"
+            continue
+
+        if name in ("codex", "grok"):
+            if models is None:
+                cfg["available"] = False
+                cfg["detail"] = f"CLIProxyAPI unreachable at {CLIPROXY_URL}"
+                continue
+            prefix = "gpt-" if name == "codex" else "grok-"
+            found = sorted(m for m in models if m.startswith(prefix))
+            cfg["available"] = bool(found)
+            if not found:
+                cfg["detail"] = f"proxy up, no {prefix}* models"
+            else:
+                pins = [cfg.get("model"), *(cfg.get("modelByRole") or {}).values()]
+                missing = sorted({p for p in pins if p and p not in models})
+                warn = f" (NOT served: {', '.join(missing)})" if missing else ""
+                cfg["detail"] = f"{len(found)} model(s) via proxy{warn}"
+            continue
+
+        if name == "pi":
+            if not shutil.which("pi"):
+                cfg["available"] = False
+                cfg["detail"] = "pi not on PATH"
+                continue
+            auth = os.path.join(HOME, ".pi", "agent", "auth.json")
+            providers = []
+            try:
+                with open(auth) as fh:
+                    providers = list(json.load(fh).keys())
+            except (OSError, ValueError):
+                pass
+            rc, ver = run(["pi", "--version"], timeout=15)
+            cfg["available"] = bool(providers) and rc == 0
+            cfg["detail"] = (
+                f"v{ver.strip()} · providers: {', '.join(providers)}"
+                if cfg["available"] else "installed but no authenticated provider"
+            )
+            continue
+
+        cfg.setdefault("available", False)
+        cfg.setdefault("detail", "no probe defined")
+    return registry
+
+
+def load():
+    merged = json.loads(json.dumps(SEED))
+    try:
+        with open(REGISTRY) as fh:
+            saved = json.load(fh)
+    except (OSError, ValueError):
+        return merged
+
+    for key in ("default", "askPerWave"):
+        if key in saved:
+            merged[key] = saved[key]
+    for name, cfg in (saved.get("harnesses") or {}).items():
+        if name not in merged["harnesses"]:
+            merged["harnesses"][name] = cfg
+            continue
+        for field in PRESERVE:
+            if field in cfg:
+                merged["harnesses"][name][field] = cfg[field]
+    return merged
+
+
+def save(registry):
+    os.makedirs(os.path.dirname(REGISTRY), exist_ok=True)
+    with open(REGISTRY, "w") as fh:
+        json.dump(registry, fh, indent=2)
+        fh.write("\n")
+
+
+def main():
+    args = set(sys.argv[1:])
+    registry = load()
+    if "--no-probe" not in args:
+        registry = probe(registry)
+        save(registry)
+
+    if "--json" in args:
+        json.dump(registry, sys.stdout, indent=2)
+        print()
+        return
+
+    default = registry.get("default")
+    print("roles: " + ", ".join(registry.get("roles", [])) + "  (run any role on any harness)")
+    print(f"\n{'harness':<9} {'':<4} {'model':<22} {'plugin':<38} detail")
+    for name, cfg in registry["harnesses"].items():
+        mark = "OK " if cfg.get("available") else "-- "
+        star = "*" if name == default else " "
+        print(
+            f"{name:<9}{star}{mark} {str(cfg.get('model') or '-'):<22} "
+            f"{str(cfg.get('plugin') or '-'):<38} {cfg.get('detail', '')}"
+        )
+    print(f"\n* = default   registry: {REGISTRY}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Run a ROLE on a HARNESS. Roles and harnesses are orthogonal: one role
+# definition, any model behind it.
+#
+#   run-role <role> --harness <codex|grok|pi> [--model M] [--read-only] -- <brief>
+#
+# Roles live in ~/.claude/agents/<role>.md and are injected as the system
+# prompt, so `developer` behaves like `developer` regardless of which model is
+# executing it.
+#
+# The `claude` harness is deliberately NOT handled here — in-process subagents
+# are the Agent tool's job:  Agent(subagent_type: "developer", ...)
+set -euo pipefail
+
+# Roles resolve from your own ~/.claude/agents first, so you can override a
+# packaged role without editing the plugin; the plugin's own agents/ is fallback.
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$(readlink "$0" || echo "$0")")/.." && pwd)}"
+USER_AGENTS="$HOME/.claude/agents"
+PLUGIN_AGENTS="$PLUGIN_ROOT/agents"
+THINKING="${RUN_ROLE_THINKING:-medium}"
+ROLE="${1:-}"; shift || true
+HARNESS=""; MODEL=""; READONLY=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --harness) HARNESS="$2"; shift 2 ;;
+    --model)   MODEL="$2";   shift 2 ;;
+    --read-only) READONLY=1; shift ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+BRIEF="$*"
+
+if [[ -z "$ROLE" || -z "$HARNESS" || -z "$BRIEF" ]]; then
+  echo "usage: run-role <role> --harness <codex|grok|pi> [--model M] [--read-only] -- <brief>" >&2
+  echo "roles: $(ls "$USER_AGENTS" "$PLUGIN_AGENTS" 2>/dev/null | grep '\.md$' | sed 's/\.md$//' | sort -u | tr '\n' ' ')" >&2
+  exit 64
+fi
+
+ROLE_FILE="$USER_AGENTS/$ROLE.md"
+[[ -r "$ROLE_FILE" ]] || ROLE_FILE="$PLUGIN_AGENTS/$ROLE.md"
+[[ -r "$ROLE_FILE" ]] || { echo "run-role: no such role: $ROLE (looked in $USER_AGENTS and $PLUGIN_AGENTS)" >&2; exit 66; }
+
+# Model resolution: --model > registry modelByRole[<role>] > registry model.
+# The role/harness pair picks the model, not the harness alone — e.g. pi runs
+# Kimi for ui-developer and DeepSeek for everything else.
+if [[ -z "$MODEL" ]]; then
+  MODEL="$(python3 - "$HARNESS" "$ROLE" <<'PY' 2>/dev/null || true
+import json, os, sys
+harness, role = sys.argv[1], sys.argv[2]
+try:
+    reg = json.load(open(os.path.expanduser("~/.claude/orchestrator/harnesses.json")))
+except (OSError, ValueError):
+    sys.exit(0)
+cfg = (reg.get("harnesses") or {}).get(harness) or {}
+print((cfg.get("modelByRole") or {}).get(role) or cfg.get("model") or "")
+PY
+)"
+fi
+
+# Strip YAML frontmatter — the body is the role definition.
+ROLE_BODY="$(awk 'BEGIN{n=0} /^---[[:space:]]*$/{n++; next} n>=2' "$ROLE_FILE")"
+[[ -n "$ROLE_BODY" ]] || { echo "run-role: $ROLE_FILE has no body" >&2; exit 65; }
+
+echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
+
+case "$HARNESS" in
+  codex)
+    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-gpt-5.6-sol}" \
+      $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
+      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    ;;
+  grok)
+    exec "$HOME/.claude/bin/cliproxy-run" "${MODEL:-grok-4.5}" \
+      $([[ $READONLY -eq 1 ]] && echo --read-only) -- \
+      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    ;;
+  pi)
+    command -v pi >/dev/null || { echo "run-role: pi not on PATH" >&2; exit 69; }
+    if [[ $READONLY -eq 1 ]]; then
+      # --tools read is the only setting that actually holds: --exclude-tools
+      # edit,write leaves bash in place and the model just redirects into files.
+      exec pi -p --no-session --tools read --thinking "$THINKING" \
+        --model "${MODEL:-moonshotai/Kimi-K3}" \
+        --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    fi
+    exec pi -p --no-session --thinking "$THINKING" \
+      --model "${MODEL:-moonshotai/Kimi-K3}" \
+      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    ;;
+  claude)
+    echo "run-role: use the Agent tool for the claude harness:" >&2
+    echo "  Agent(subagent_type: \"$ROLE\", isolation: \"worktree\", prompt: <brief>)" >&2
+    exit 64
+    ;;
+  *)
+    echo "run-role: unknown harness: $HARNESS" >&2
+    exit 64
+    ;;
+esac

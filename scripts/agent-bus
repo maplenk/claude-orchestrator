@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+"""Per-session message bus for orchestrator / implementor / verifier.
+
+One server per Claude Code session, bound to 127.0.0.1 on an ephemeral port.
+Speaks two protocols over the same store so every harness can reach it:
+
+  MCP  (POST /mcp)   — Claude Code / Codex / anything MCP-capable
+  REST (POST /send…) — headless harnesses that only have curl
+
+  agent-bus serve --session <id> [--channel <name>]   # start (hooks do this)
+  agent-bus info                                       # print handshake JSON
+  agent-bus stop                                       # shut down
+
+Design notes, and where this deliberately differs from agentchattr:
+
+* **Long-poll, not keystroke injection.** You cannot wake an idle Claude Code
+  subagent from outside — it is not a terminal, and it only exists while it is
+  inside a tool call. So `chat_wait` blocks server-side until a message arrives.
+  An agent that wants to be reachable calls it; that is the whole mechanism.
+* **Identity is issued, not claimed.** `register` returns a token; the server
+  maps token -> name and stamps every message itself. An agent cannot post as
+  the orchestrator by passing a different `from`.
+* **Loop guard.** Agent-to-agent chains carry a hop count and are refused past
+  a limit, so two agents cannot ping-pong forever.
+
+Storage is the same JSONL the `agent-board` CLI reads, so both work together.
+"""
+import argparse
+import json
+import os
+import secrets
+import subprocess
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
+
+MAX_HOPS = 6
+PROTOCOL = "2025-06-18"
+LOCK = threading.Lock()
+NEW_MSG = threading.Condition(LOCK)
+
+STATE = {
+    "session": None,
+    "channel": "default",
+    "path": None,
+    "tokens": {},   # token -> agent name
+    "seen": {},     # agent name -> last heartbeat ts
+}
+
+
+# ---------------------------------------------------------------- storage
+
+def repo_root():
+    try:
+        r = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.getcwd()
+
+
+def bus_dir():
+    d = os.path.join(repo_root(), ".claude", "orchestrator")
+    os.makedirs(os.path.join(d, "board"), exist_ok=True)
+    gi = os.path.join(d, ".gitignore")
+    if not os.path.exists(gi):
+        with open(gi, "w") as fh:
+            fh.write("*\n!.gitignore\n")
+    return d
+
+
+def handshake_path():
+    return os.path.join(bus_dir(), "bus.json")
+
+
+def read_msgs():
+    out = []
+    try:
+        with open(STATE["path"]) as fh:
+            for i, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                    e["_n"] = i
+                    out.append(e)
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return out
+
+
+def append_msg(entry):
+    with open(STATE["path"], "a") as fh:
+        fh.write(json.dumps(entry) + "\n")
+
+
+# ---------------------------------------------------------------- ops
+
+def op_register(name, **_):
+    if not name:
+        return {"error": "name required"}
+    token = secrets.token_urlsafe(16)
+    with LOCK:
+        STATE["tokens"][token] = name
+        STATE["seen"][name] = time.time()
+    return {"ok": True, "name": name, "token": token,
+            "session": STATE["session"], "channel": STATE["channel"]}
+
+
+def whoami(token):
+    with LOCK:
+        return STATE["tokens"].get(token or "")
+
+
+def op_send(token, to="all", msg="", topic=None, hops=0, **_):
+    sender = whoami(token)
+    if not sender:
+        return {"error": "unregistered token; call register first"}
+    if int(hops or 0) >= MAX_HOPS:
+        return {"error": f"loop guard: {MAX_HOPS} hops reached, not delivered"}
+    entry = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "from": sender, "to": to or "all",
+        "topic": topic, "msg": (msg or "").strip(),
+        "hops": int(hops or 0) + 1,
+        "session": STATE["session"],
+    }
+    with NEW_MSG:
+        append_msg(entry)
+        STATE["seen"][sender] = time.time()
+        NEW_MSG.notify_all()
+    return {"ok": True, "delivered": entry["to"], "n": len(read_msgs())}
+
+
+def _match(e, who, since):
+    return e["_n"] > since and (not who or e.get("to") in (who, "all"))
+
+
+def _cursor(all_msgs):
+    """Cursor is the highest message number on the channel, not a count of
+    matches — passing a match count back as `since` silently re-delivers
+    messages you already saw."""
+    return all_msgs[-1]["_n"] if all_msgs else 0
+
+
+def op_read(token=None, to=None, since=0, limit=50, **_):
+    who = to or whoami(token)
+    everything = read_msgs()
+    msgs = [e for e in everything if _match(e, who, int(since or 0))]
+    return {"ok": True, "for": who, "count": len(msgs),
+            "cursor": _cursor(everything), "messages": msgs[-int(limit):]}
+
+
+def op_wait(token=None, to=None, since=0, timeout=120, **_):
+    who = to or whoami(token)
+    since = int(since or 0)
+    deadline = time.time() + min(int(timeout or 120), 600)
+    with NEW_MSG:
+        while True:
+            everything = read_msgs()
+            msgs = [e for e in everything if _match(e, who, since)]
+            if msgs:
+                return {"ok": True, "for": who, "cursor": _cursor(everything),
+                        "messages": msgs}
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                return {"ok": True, "for": who, "cursor": _cursor(everything),
+                        "messages": [], "timeout": True}
+            NEW_MSG.wait(min(remaining, 5))
+
+
+def op_who(**_):
+    now = time.time()
+    with LOCK:
+        agents = [{"name": n, "idle_s": round(now - t, 1)}
+                  for n, t in sorted(STATE["seen"].items())]
+    return {"ok": True, "session": STATE["session"], "agents": agents}
+
+
+OPS = {"register": op_register, "send": op_send, "read": op_read,
+       "wait": op_wait, "who": op_who}
+
+TOOLS = [
+    {"name": "chat_register",
+     "description": "Join the session bus under a role name. Returns a token; pass it to every other call. Do this first.",
+     "inputSchema": {"type": "object", "required": ["name"], "properties": {
+         "name": {"type": "string", "description": "your role, e.g. developer, verifier, orchestrator"}}}},
+    {"name": "chat_send",
+     "description": "Post a message to another role or to 'all'. Your identity comes from the token, not from what you claim.",
+     "inputSchema": {"type": "object", "required": ["token", "msg"], "properties": {
+         "token": {"type": "string"},
+         "to": {"type": "string", "description": "role name or 'all' (default)"},
+         "topic": {"type": "string"},
+         "msg": {"type": "string"},
+         "hops": {"type": "integer", "description": "carry through from a message you are replying to"}}}},
+    {"name": "chat_read",
+     "description": "Read messages addressed to you or to 'all' since a cursor. Non-blocking.",
+     "inputSchema": {"type": "object", "required": ["token"], "properties": {
+         "token": {"type": "string"},
+         "since": {"type": "integer", "description": "last message number you saw"},
+         "limit": {"type": "integer"}}}},
+    {"name": "chat_wait",
+     "description": "Block until a message arrives for you, or until timeout. This is how you stay reachable while idle.",
+     "inputSchema": {"type": "object", "required": ["token"], "properties": {
+         "token": {"type": "string"},
+         "since": {"type": "integer"},
+         "timeout": {"type": "integer", "description": "seconds, max 600"}}}},
+    {"name": "chat_who",
+     "description": "List roles registered on this session bus and how long each has been idle.",
+     "inputSchema": {"type": "object", "properties": {}}},
+]
+
+
+# ---------------------------------------------------------------- http
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def _reply(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _body(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        if not n:
+            return {}
+        try:
+            return json.loads(self.rfile.read(n))
+        except ValueError:
+            return {}
+
+    def do_GET(self):
+        u = urlparse(self.path)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        name = u.path.strip("/")
+        if name == "health":
+            return self._reply({"ok": True, "session": STATE["session"]})
+        if name in OPS:
+            return self._reply(OPS[name](**q))
+        self._reply({"error": "not found"}, 404)
+
+    def do_POST(self):
+        u = urlparse(self.path)
+        name = u.path.strip("/")
+
+        if name == "mcp":
+            return self._mcp(self._body())
+        if name in OPS:
+            return self._reply(OPS[name](**self._body()))
+        self._reply({"error": "not found"}, 404)
+
+    # ---- minimal MCP over streamable HTTP
+    def _mcp(self, req):
+        rid = req.get("id")
+        method = req.get("method")
+        params = req.get("params") or {}
+
+        if method == "initialize":
+            return self._reply({"jsonrpc": "2.0", "id": rid, "result": {
+                "protocolVersion": PROTOCOL,
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "agent-bus", "version": "1.0.0"}}})
+
+        if method and method.startswith("notifications/"):
+            self.send_response(202)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+
+        if method == "tools/list":
+            return self._reply({"jsonrpc": "2.0", "id": rid,
+                                "result": {"tools": TOOLS}})
+
+        if method == "tools/call":
+            tool = (params.get("name") or "").replace("chat_", "")
+            args = params.get("arguments") or {}
+            fn = OPS.get(tool)
+            if not fn:
+                return self._reply({"jsonrpc": "2.0", "id": rid, "error": {
+                    "code": -32601, "message": f"unknown tool {params.get('name')}"}})
+            try:
+                result = fn(**args)
+            except TypeError as exc:
+                result = {"error": f"bad arguments: {exc}"}
+            return self._reply({"jsonrpc": "2.0", "id": rid, "result": {
+                "content": [{"type": "text", "text": json.dumps(result, indent=2)}],
+                "isError": bool(result.get("error"))}})
+
+        self._reply({"jsonrpc": "2.0", "id": rid, "error": {
+            "code": -32601, "message": f"unknown method {method}"}})
+
+
+# ---------------------------------------------------------------- cli
+
+def channel_default():
+    try:
+        r = subprocess.run(["git", "branch", "--show-current"],
+                           capture_output=True, text=True, timeout=5)
+        if r.stdout.strip():
+            return r.stdout.strip().replace("/", "-")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return "default"
+
+
+def serve(args):
+    STATE["session"] = args.session or os.environ.get("CLAUDE_SESSION_ID") or "local"
+    STATE["channel"] = args.channel or channel_default()
+    STATE["path"] = os.path.join(bus_dir(), "board", f"{STATE['channel']}.jsonl")
+
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as exc:
+        # Port already bound: another session owns the bus. That is fine —
+        # sessions share it and stay separated by channel. Do not fight over it.
+        if args.port and getattr(exc, "errno", None) in (48, 98):
+            print(f"agent-bus: already running on :{args.port}, reusing", flush=True)
+            return
+        raise
+    port = httpd.server_address[1]
+    info = {
+        "session": STATE["session"],
+        "channel": STATE["channel"],
+        "url": f"http://127.0.0.1:{port}",
+        "mcp": f"http://127.0.0.1:{port}/mcp",
+        "board": STATE["path"],
+        "pid": os.getpid(),
+    }
+    with open(handshake_path(), "w") as fh:
+        json.dump(info, fh, indent=2)
+    print(json.dumps(info, indent=2), flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            os.remove(handshake_path())
+        except OSError:
+            pass
+
+
+def info(_args):
+    try:
+        with open(handshake_path()) as fh:
+            print(fh.read())
+    except OSError:
+        print("no bus running (no bus.json)", file=sys.stderr)
+        sys.exit(1)
+
+
+def stop(_args):
+    try:
+        with open(handshake_path()) as fh:
+            pid = json.load(fh)["pid"]
+        os.kill(pid, 15)
+        print(f"stopped {pid}")
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"no bus to stop ({exc})", file=sys.stderr)
+        sys.exit(1)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="agent-bus", description=__doc__)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("serve")
+    p.add_argument("--session", default=None)
+    p.add_argument("--channel", default=None)
+    # Fixed by default so the bus can be registered once in .mcp.json — Claude
+    # Code connects MCP servers at session start, so an ephemeral port is
+    # reachable over REST only. Pass --port 0 if you want ephemeral anyway.
+    p.add_argument("--port", type=int, default=int(os.environ.get("AGENT_BUS_PORT", 8477)))
+    p.set_defaults(func=serve)
+    sub.add_parser("info").set_defaults(func=info)
+    sub.add_parser("stop").set_defaults(func=stop)
+    a = ap.parse_args()
+    a.func(a)
+
+
+if __name__ == "__main__":
+    main()
