@@ -62,6 +62,22 @@ fi
 
 # Strip YAML frontmatter — the body is the role definition.
 ROLE_BODY="$(awk 'BEGIN{n=0} /^---[[:space:]]*$/{n++; next} n>=2' "$ROLE_FILE")"
+# A short reminder repeated at the very end of both the role and the brief.
+# Instructions given once lose influence as a session grows; recency is the
+# cheapest counter available to a single-shot invocation.
+ROLE_REMINDER="$(python3 - "$ROLE_FILE" <<'PYEOF'
+import re, sys
+s = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+m = re.match(r"^---\n(.*?)\n---", s, re.S)
+if m:
+    r = re.search(r"^roleReminder:\s*>-?\s*\n((?:[ \t]+.*\n?)+)", m.group(1), re.M)
+    if r:
+        print(" ".join(l.strip() for l in r.group(1).splitlines() if l.strip()))
+    else:
+        r = re.search(r"^roleReminder:\s*(.+)$", m.group(1), re.M)
+        if r: print(r.group(1).strip().strip("\"'"))
+PYEOF
+)"
 [[ -n "$ROLE_BODY" ]] || { echo "run-role: $ROLE_FILE has no body" >&2; exit 65; }
 
 # Isolation is opt-in, never automatic: cutting a worktree changes where the
@@ -116,6 +132,16 @@ if [[ $READONLY -eq 1 && $READONLY_SUPPORTED -eq 0 ]]; then
 fi
 
 ROLE_FILE_TMP="$(mktemp -t orchestrator-role)"
+if [[ -n "$ROLE_REMINDER" ]]; then
+  ROLE_BODY="$ROLE_BODY
+
+## Role reminder
+
+$ROLE_REMINDER"
+  BRIEF="$BRIEF
+
+[Role reminder: $ROLE_REMINDER]"
+fi
 printf '%s\n' "$ROLE_BODY" > "$ROLE_FILE_TMP"
 trap 'rm -f "$ROLE_FILE_TMP"' EXIT
 

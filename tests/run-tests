@@ -259,6 +259,15 @@ def suite_role():
     ok("--worktree reports its base ancestry",
        "cut from" in p.stderr and "merge orchestrator/" in p.stderr, p.stderr[:200])
 
+    # every role carries a short reminder, repeated at the end of the role and the
+    # brief — instructions given once lose influence as a session grows
+    import re as _re
+    for role in ("developer", "ui-developer", "verifier"):
+        fm = open(os.path.join(ROOT, "agents", f"{role}.md")).read()
+        m = _re.match(r"^---\n(.*?)\n---", fm, _re.S)
+        ok(f"{role} has a roleReminder",
+           bool(m) and "roleReminder:" in m.group(1))
+
     # role bodies must survive frontmatter stripping
     for role in ("developer", "ui-developer", "verifier"):
         f = os.path.join(ROOT, "agents", f"{role}.md")
