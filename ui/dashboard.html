@@ -116,11 +116,11 @@ a:hover{color:var(--ink)}
 .nav-later{margin-top:8px;padding-top:8px;border-top:1px solid var(--hair-2)}
 .grow{flex:1;min-height:20px}
 .side-art{
-  width:100%;height:210px;flex:none;
-  background:var(--art-side) 14% 100%/cover no-repeat;
-  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 22%),linear-gradient(270deg,#000 0,#000 78%,transparent 100%);
+  width:100%;height:316px;flex:none;pointer-events:none;
+  background:var(--art-side) 16% 100%/cover no-repeat;
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 12%),linear-gradient(270deg,#000 0,#000 74%,transparent 100%);
   -webkit-mask-composite:source-in;
-  mask-image:linear-gradient(180deg,transparent 0,#000 22%),linear-gradient(270deg,#000 0,#000 78%,transparent 100%);
+  mask-image:linear-gradient(180deg,transparent 0,#000 12%),linear-gradient(270deg,#000 0,#000 74%,transparent 100%);
   mask-composite:intersect;
 }
 .who{display:flex;align-items:center;gap:11px;padding:12px 6px 0;border-top:1px solid var(--hair-2);min-width:0}
@@ -168,11 +168,11 @@ a:hover{color:var(--ink)}
 
 .hero{position:relative;padding:22px 0 26px}
 .hero-art{
-  position:absolute;right:-10px;top:-4px;width:50%;max-width:700px;aspect-ratio:3/1;
-  background:var(--art-hero) right center/cover no-repeat;pointer-events:none;
-  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 44%),linear-gradient(180deg,#000 0,#000 62%,transparent 100%),linear-gradient(270deg,#000 0,#000 94%,transparent 100%);
+  position:absolute;right:0;top:-12px;width:74%;max-width:990px;aspect-ratio:5/2;
+  background:var(--art-hero) right 38%/cover no-repeat;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%),linear-gradient(180deg,#000 0,#000 58%,transparent 100%),linear-gradient(270deg,#000 0,#000 95%,transparent 100%);
   -webkit-mask-composite:source-in;
-  mask-image:linear-gradient(90deg,transparent 0,#000 44%),linear-gradient(180deg,#000 0,#000 62%,transparent 100%),linear-gradient(270deg,#000 0,#000 94%,transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 30%),linear-gradient(180deg,#000 0,#000 58%,transparent 100%),linear-gradient(270deg,#000 0,#000 95%,transparent 100%);
   mask-composite:intersect;
 }
 .greet{
@@ -353,6 +353,7 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
   .shell{grid-template-columns:minmax(0,1fr)}
   .side{display:none}
   .row-three{grid-template-columns:minmax(0,1fr)}
+  .hero-art{width:56%;max-width:520px}
 }
 @media (max-width:620px){
   .main{padding:16px 14px 32px}
