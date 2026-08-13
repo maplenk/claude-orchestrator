@@ -29,6 +29,7 @@ import argparse
 import json
 import os
 import secrets
+import signal
 import subprocess
 import sys
 import threading
@@ -47,8 +48,12 @@ STATE = {
     "session": None,
     "channel": "default",
     "path": None,
+    "runs_path": None,
     "tokens": {},   # token -> agent name
     "seen": {},     # agent name -> last heartbeat ts
+    "meta": {},     # agent name -> optional role/harness/model
+    "runs": {},     # id -> folded run; in memory so /status never re-reads the JSONL
+    "run_ids": [],  # insertion order, newest last
 }
 
 
@@ -68,6 +73,7 @@ def repo_root():
 def bus_dir():
     d = os.path.join(repo_root(), ".claude", "orchestrator")
     os.makedirs(os.path.join(d, "board"), exist_ok=True)
+    os.makedirs(os.path.join(d, "runs"), exist_ok=True)
     gi = os.path.join(d, ".gitignore")
     if not os.path.exists(gi):
         with open(gi, "w") as fh:
@@ -103,15 +109,105 @@ def append_msg(entry):
         fh.write(json.dumps(entry) + "\n")
 
 
+def _now():
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _apply_run_event(ev):
+    """Fold one JSONL event into the in-memory run index."""
+    rid = ev.get("id")
+    if not rid:
+        return
+    kind = ev.get("event")
+    if kind == "opened":
+        run = {
+            "id": rid,
+            "title": ev.get("title") or "",
+            "state": ev.get("state") or "running",
+            "opened": ev.get("ts"),
+            "stages": [],
+            "pauses": [],
+        }
+        for k in ("role", "harness", "model", "pid"):
+            if ev.get(k) not in (None, ""):
+                run[k] = ev[k]
+        STATE["runs"][rid] = run
+        if rid not in STATE["run_ids"]:
+            STATE["run_ids"].append(rid)
+        return
+    run = STATE["runs"].get(rid)
+    if not run:
+        return
+    if kind == "stage":
+        rec = {"stage": ev.get("stage"), "ts": ev.get("ts")}
+        if ev.get("note"):
+            rec["note"] = ev["note"]
+        run["stages"].append(rec)
+    elif kind == "paused":
+        run["state"] = "paused"
+        run["pauses"].append({"start": ev.get("ts")})
+    elif kind == "resumed":
+        run["state"] = "running"
+        if run["pauses"] and "end" not in run["pauses"][-1]:
+            run["pauses"][-1]["end"] = ev.get("ts")
+    elif kind == "closed":
+        outcome = ev.get("outcome")
+        run["state"] = outcome
+        run["closed"] = ev.get("ts")
+        run["outcome"] = outcome
+        if ev.get("exit_code") is not None:
+            run["exit_code"] = ev["exit_code"]
+        if run["pauses"] and "end" not in run["pauses"][-1]:
+            run["pauses"][-1]["end"] = ev.get("ts")
+
+
+def load_runs():
+    STATE["runs"] = {}
+    STATE["run_ids"] = []
+    path = STATE.get("runs_path")
+    if not path:
+        return
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    _apply_run_event(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+
+
+def append_run(ev):
+    with open(STATE["runs_path"], "a") as fh:
+        fh.write(json.dumps(ev) + "\n")
+    _apply_run_event(ev)
+
+
 # ---------------------------------------------------------------- ops
 
-def op_register(name, **_):
+def op_register(name, role=None, harness=None, model=None, **_):
     if not name:
         return {"error": "name required"}
     token = secrets.token_urlsafe(16)
+    meta = {}
+    if role:
+        meta["role"] = role
+    if harness:
+        meta["harness"] = harness
+    if model:
+        meta["model"] = model
     with LOCK:
         STATE["tokens"][token] = name
         STATE["seen"][name] = time.time()
+        # re-register without extras keeps whatever was declared last time
+        if meta:
+            STATE["meta"][name] = meta
+        elif name not in STATE["meta"]:
+            STATE["meta"][name] = {}
     return {"ok": True, "name": name, "token": token,
             "session": STATE["session"], "channel": STATE["channel"]}
 
@@ -186,6 +282,198 @@ def op_who(**_):
     return {"ok": True, "session": STATE["session"], "agents": agents}
 
 
+def _new_run_id():
+    for _ in range(8):
+        rid = secrets.token_hex(3)
+        if rid not in STATE["runs"]:
+            return rid
+    return secrets.token_hex(4)
+
+
+def _get_run(rid):
+    if not rid:
+        return None, {"error": "id required"}
+    run = STATE["runs"].get(rid)
+    if not run:
+        return None, {"error": f"no such run {rid}"}
+    return run, None
+
+
+def _parse_pid(pid):
+    if pid in (None, ""):
+        return None, None
+    try:
+        n = int(pid)
+    except (TypeError, ValueError):
+        return None, {"error": "pid must be an integer"}
+    if n <= 0:
+        # kill(0, sig) is the process group — never treat 0 as a run pid
+        return None, {"error": "pid must be a positive integer"}
+    return n, None
+
+
+def _signal_pid(pid, sig):
+    """SIGSTOP/SIGCONT only. A dead or foreign pid must not crash the server."""
+    try:
+        os.kill(int(pid), sig)
+        return None
+    except ProcessLookupError:
+        return "process is gone"
+    except PermissionError:
+        return "cannot signal pid (permission denied)"
+    except (OSError, ValueError, TypeError, OverflowError) as exc:
+        return f"cannot signal pid: {exc}"
+
+
+def op_run_open(title="", role=None, harness=None, model=None, pid=None, **_):
+    title = (title or "").strip()
+    if not title:
+        return {"error": "title required"}
+    pid_val, err = _parse_pid(pid)
+    if err:
+        return err
+    with LOCK:
+        rid = _new_run_id()
+        ev = {"id": rid, "event": "opened", "ts": _now(),
+              "title": title, "state": "running"}
+        if role:
+            ev["role"] = role
+        if harness:
+            ev["harness"] = harness
+        if model:
+            ev["model"] = model
+        if pid_val is not None:
+            ev["pid"] = pid_val
+        append_run(ev)
+        return {"ok": True, "id": rid, "run": STATE["runs"][rid]}
+
+
+def op_run_stage(id=None, stage=None, note=None, **_):
+    stage = (stage or "").strip()
+    if not stage:
+        return {"error": "stage required"}
+    with LOCK:
+        run, err = _get_run(id)
+        if err:
+            return err
+        if run["state"] in ("complete", "failed"):
+            return {"error": f"run {id} is already {run['state']}"}
+        ev = {"id": id, "event": "stage", "ts": _now(), "stage": stage}
+        if note:
+            ev["note"] = note
+        append_run(ev)
+        return {"ok": True, "id": id, "run": run}
+
+
+def op_run_pause(id=None, **_):
+    with LOCK:
+        run, err = _get_run(id)
+        if err:
+            return err
+        if run["state"] != "running":
+            return {"error": f"run {id} is {run['state']}, not running"}
+        pid = run.get("pid")
+        if not pid:
+            return {"error": "no pid recorded; cannot pause"}
+        # signal first: a dead pid must not flip state
+        fail = _signal_pid(pid, signal.SIGSTOP)
+        if fail:
+            return {"error": fail}
+        append_run({"id": id, "event": "paused", "ts": _now(), "state": "paused"})
+        return {"ok": True, "id": id, "run": run}
+
+
+def op_run_resume(id=None, **_):
+    with LOCK:
+        run, err = _get_run(id)
+        if err:
+            return err
+        if run["state"] != "paused":
+            return {"error": f"run {id} is {run['state']}, not paused"}
+        pid = run.get("pid")
+        if not pid:
+            return {"error": "no pid recorded; cannot resume"}
+        fail = _signal_pid(pid, signal.SIGCONT)
+        if fail:
+            return {"error": fail}
+        append_run({"id": id, "event": "resumed", "ts": _now(), "state": "running"})
+        return {"ok": True, "id": id, "run": run}
+
+
+def op_run_close(id=None, outcome=None, exit_code=None, **_):
+    if outcome not in ("complete", "failed"):
+        return {"error": "outcome must be complete or failed"}
+    code = None
+    if exit_code not in (None, ""):
+        try:
+            code = int(exit_code)
+        except (TypeError, ValueError):
+            return {"error": "exit_code must be an integer"}
+    with LOCK:
+        run, err = _get_run(id)
+        if err:
+            return err
+        if run["state"] in ("complete", "failed"):
+            return {"error": f"run {id} is already {run['state']}"}
+        ev = {"id": id, "event": "closed", "ts": _now(),
+              "outcome": outcome, "state": outcome}
+        if code is not None:
+            ev["exit_code"] = code
+        append_run(ev)
+        return {"ok": True, "id": id, "run": run}
+
+
+def op_run_list(limit=None, state=None, **_):
+    with LOCK:
+        runs = [STATE["runs"][i] for i in STATE["run_ids"] if i in STATE["runs"]]
+        if state:
+            runs = [r for r in runs if r.get("state") == state]
+        if limit not in (None, ""):
+            try:
+                n = int(limit)
+            except (TypeError, ValueError):
+                return {"error": "limit must be an integer"}
+            if n < 0:
+                return {"error": "limit must be >= 0"}
+            # runs[-0:] is the full list in Python, so treat 0 as empty
+            runs = [] if n == 0 else runs[-n:]
+        return {"ok": True, "runs": runs}
+
+
+def _runs_snapshot():
+    """Counts and open runs from the in-memory index — cheap on the poll path."""
+    counts = {"running": 0, "paused": 0, "complete": 0, "failed": 0}
+    open_runs = []
+    complete = closed = 0
+    for rid in STATE["run_ids"]:
+        r = STATE["runs"].get(rid)
+        if not r:
+            continue
+        st = r.get("state")
+        if st in counts:
+            counts[st] += 1
+        if st in ("running", "paused"):
+            open_runs.append(r)
+        if st in ("complete", "failed"):
+            closed += 1
+            if st == "complete":
+                complete += 1
+    return {"counts": counts, "open": open_runs}, {"complete": complete, "closed": closed}
+
+
+def _rich_agents():
+    now = time.time()
+    with LOCK:
+        out = []
+        for n, t in sorted(STATE["seen"].items()):
+            rec = {"name": n, "idle_s": round(now - t, 1)}
+            for k, v in (STATE["meta"].get(n) or {}).items():
+                if v:
+                    rec[k] = v
+            out.append(rec)
+        return out
+
+
 def op_status(doctor=1, **_):
     """Everything the dashboard needs, in one call.
 
@@ -217,6 +505,8 @@ def op_status(doctor=1, **_):
                     doctor = None
 
     msgs = read_msgs()
+    with LOCK:
+        runs, rate = _runs_snapshot()
     return {
         "ok": True,
         "session": STATE["session"],
@@ -225,7 +515,9 @@ def op_status(doctor=1, **_):
         "default": registry.get("default"),
         "harnesses": registry.get("harnesses", {}),
         "doctor": doctor,
-        "agents": op_who()["agents"],
+        "agents": _rich_agents(),
+        "runs": runs,
+        "successRate": rate,
         "messageCount": len(msgs),
         "cursor": _cursor(msgs),
     }
@@ -234,11 +526,20 @@ def op_status(doctor=1, **_):
 OPS = {"register": op_register, "send": op_send, "read": op_read,
        "wait": op_wait, "who": op_who, "status": op_status}
 
+RUN_OPS = {
+    "run_open": op_run_open, "run_stage": op_run_stage,
+    "run_pause": op_run_pause, "run_resume": op_run_resume,
+    "run_close": op_run_close, "run_list": op_run_list,
+}
+
 TOOLS = [
     {"name": "chat_register",
      "description": "Join the session bus under a role name. Returns a token; pass it to every other call. Do this first.",
      "inputSchema": {"type": "object", "required": ["name"], "properties": {
-         "name": {"type": "string", "description": "your role, e.g. developer, verifier, orchestrator"}}}},
+         "name": {"type": "string", "description": "your role, e.g. developer, verifier, orchestrator"},
+         "role": {"type": "string", "description": "optional declared role"},
+         "harness": {"type": "string", "description": "optional harness name"},
+         "model": {"type": "string", "description": "optional model id"}}}},
     {"name": "chat_send",
      "description": "Post a message to another role or to 'all'. Your identity comes from the token, not from what you claim.",
      "inputSchema": {"type": "object", "required": ["token", "msg"], "properties": {
@@ -260,11 +561,44 @@ TOOLS = [
          "since": {"type": "integer"},
          "timeout": {"type": "integer", "description": "seconds, max 600"}}}},
     {"name": "chat_status",
-     "description": "Full orchestrator status: harnesses, roles, doctor checks, registered agents, message count.",
+     "description": "Full orchestrator status: harnesses, roles, doctor checks, registered agents, runs summary, message count.",
      "inputSchema": {"type": "object", "properties": {}}},
     {"name": "chat_who",
      "description": "List roles registered on this session bus and how long each has been idle.",
      "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "run_open",
+     "description": "Open a run (one delegation). Returns a short id. Records opened timestamp and state running.",
+     "inputSchema": {"type": "object", "required": ["title"], "properties": {
+         "title": {"type": "string"},
+         "role": {"type": "string"},
+         "harness": {"type": "string"},
+         "model": {"type": "string"},
+         "pid": {"type": "integer", "description": "optional OS pid so pause can SIGSTOP it"}}}},
+    {"name": "run_stage",
+     "description": "Advance a run to a new stage (free string, e.g. intent, delegate, implement, verify).",
+     "inputSchema": {"type": "object", "required": ["id", "stage"], "properties": {
+         "id": {"type": "string"},
+         "stage": {"type": "string"},
+         "note": {"type": "string"}}}},
+    {"name": "run_pause",
+     "description": "Pause a run by sending SIGSTOP to its recorded pid. Fails without changing state if there is no pid or the process is gone.",
+     "inputSchema": {"type": "object", "required": ["id"], "properties": {
+         "id": {"type": "string"}}}},
+    {"name": "run_resume",
+     "description": "Resume a paused run by sending SIGCONT to its recorded pid.",
+     "inputSchema": {"type": "object", "required": ["id"], "properties": {
+         "id": {"type": "string"}}}},
+    {"name": "run_close",
+     "description": "Finish a run with outcome complete or failed. Duration is derivable from opened/closed.",
+     "inputSchema": {"type": "object", "required": ["id", "outcome"], "properties": {
+         "id": {"type": "string"},
+         "outcome": {"type": "string", "description": "complete or failed"},
+         "exit_code": {"type": "integer"}}}},
+    {"name": "run_list",
+     "description": "List runs, newest last. Empty before any run exists.",
+     "inputSchema": {"type": "object", "properties": {
+         "limit": {"type": "integer"},
+         "state": {"type": "string"}}}},
 ]
 
 
@@ -293,6 +627,22 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return {}
 
+    def _runs(self, method, path, payload):
+        parts = [p for p in path.split("/") if p]
+        if method == "GET" and parts == ["runs"]:
+            return op_run_list(**payload)
+        if method == "POST" and parts == ["runs"]:
+            return op_run_open(**payload)
+        if method == "POST" and len(parts) == 3 and parts[0] == "runs":
+            fn = {"stage": op_run_stage, "pause": op_run_pause,
+                  "resume": op_run_resume, "close": op_run_close}.get(parts[2])
+            if not fn:
+                return None
+            payload = dict(payload)
+            payload["id"] = parts[1]
+            return fn(**payload)
+        return None
+
     def do_GET(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -301,6 +651,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_ui()
         if name == "health":
             return self._reply({"ok": True, "session": STATE["session"]})
+        if name == "runs" or name.startswith("runs/"):
+            result = self._runs("GET", name, q)
+            if result is None:
+                return self._reply({"error": "not found"}, 404)
+            return self._reply(result)
         if name in OPS:
             return self._reply(OPS[name](**q))
         self._reply({"error": "not found"}, 404)
@@ -329,6 +684,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if name == "mcp":
             return self._mcp(self._body())
+        if name == "runs" or name.startswith("runs/"):
+            result = self._runs("POST", name, self._body())
+            if result is None:
+                return self._reply({"error": "not found"}, 404)
+            return self._reply(result)
         if name in OPS:
             return self._reply(OPS[name](**self._body()))
         self._reply({"error": "not found"}, 404)
@@ -358,7 +718,7 @@ class Handler(BaseHTTPRequestHandler):
         if method == "tools/call":
             tool = (params.get("name") or "").replace("chat_", "")
             args = params.get("arguments") or {}
-            fn = OPS.get(tool)
+            fn = OPS.get(tool) or RUN_OPS.get(tool)
             if not fn:
                 return self._reply({"jsonrpc": "2.0", "id": rid, "error": {
                     "code": -32601, "message": f"unknown tool {params.get('name')}"}})
@@ -391,6 +751,8 @@ def serve(args):
     STATE["session"] = args.session or os.environ.get("CLAUDE_SESSION_ID") or "local"
     STATE["channel"] = args.channel or channel_default()
     STATE["path"] = os.path.join(bus_dir(), "board", f"{STATE['channel']}.jsonl")
+    STATE["runs_path"] = os.path.join(bus_dir(), "runs", f"{STATE['channel']}.jsonl")
+    load_runs()
 
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
