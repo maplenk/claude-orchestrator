@@ -104,6 +104,21 @@ Three deliberate design choices:
 
 Loop guard refuses messages past 6 hops.
 
+## Developing on this plugin
+
+Installing from a local path **copies** the repo into
+`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`. `/reload-plugins` does not re-copy
+when the version is unchanged, so edits to the repo will not take effect. Either bump `version`
+in `plugin.json`, or sync the cache directly:
+
+```bash
+rsync -a --delete --exclude='.git' ~/Documents/claude-orchestrator/ \
+  ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/
+```
+
+Do not declare `"hooks": "./hooks/hooks.json"` in `plugin.json` — that path is auto-loaded, and
+naming it again fails the whole hooks block with "Duplicate hooks file detected".
+
 ## Configuration
 
 | Path | What |
