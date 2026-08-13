@@ -9,7 +9,7 @@
 # executing it.
 #
 # The `claude` harness is deliberately NOT handled here — in-process subagents
-# are the Agent tool's job:  Agent(subagent_type: "developer", ...)
+# are the Agent tool's job:  Agent(subagent_type: "orchestrator:developer", ...)
 set -euo pipefail
 
 # Roles resolve from your own ~/.claude/agents first, so you can override a
@@ -91,7 +91,7 @@ case "$HARNESS" in
     ;;
   claude)
     echo "run-role: use the Agent tool for the claude harness:" >&2
-    echo "  Agent(subagent_type: \"$ROLE\", isolation: \"worktree\", prompt: <brief>)" >&2
+    echo "  Agent(subagent_type: \"orchestrator:$ROLE\", isolation: \"worktree\", prompt: <brief>)" >&2
     exit 64
     ;;
   *)

@@ -11,6 +11,5 @@
     "multi-model",
     "code-review",
     "delegation"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }

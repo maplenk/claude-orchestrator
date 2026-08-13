@@ -13,10 +13,13 @@ definition runs on any harness — do not create a per-model copy of a role.
 **claude** — the Agent tool, in-process:
 
 ```
-Agent(subagent_type: "developer", isolation: "worktree", prompt: <brief>)
+Agent(subagent_type: "orchestrator:developer", isolation: "worktree", prompt: <brief>)
 ```
 
 The only harness that supports worktree isolation, so it is the default for concurrent waves.
+
+Plugin agents are namespaced, so the Agent tool needs `orchestrator:<role>`. `run-role` takes
+the bare name, because it resolves role *files* rather than registered agent types.
 
 **codex / grok / pi** — `run-role` injects the role file as the system prompt:
 

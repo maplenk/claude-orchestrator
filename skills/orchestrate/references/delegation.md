@@ -60,7 +60,7 @@ index. With **one worktree per task**, a wave runs concurrently and safely.
 ## Worktree isolation
 
 ```
-Agent(subagent_type: "developer", isolation: "worktree", prompt: <brief>)
+Agent(subagent_type: "orchestrator:developer", isolation: "worktree", prompt: <brief>)
 ```
 
 Each agent gets its own checkout and its own index. Three rules:
@@ -106,7 +106,7 @@ they are separate choices.
 | Verification | `verifier` |
 
 ```
-Agent(subagent_type: "developer", isolation: "worktree", prompt: <brief>)   # claude
+Agent(subagent_type: "orchestrator:developer", isolation: "worktree", prompt: <brief>)  # claude
 ~/.claude/bin/run-role developer --harness codex -- "<brief>"               # anything else
 ```
 

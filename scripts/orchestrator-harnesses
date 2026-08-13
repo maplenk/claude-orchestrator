@@ -29,7 +29,7 @@ SEED = {
     "harnesses": {
         "claude": {
             "label": "Claude — in-process subagent",
-            "runner": "Agent(subagent_type: <role>)",
+            "runner": "Agent(subagent_type: orchestrator:<role>)",
             "plugin": None,
             "model": None,
             "notes": "Fastest to start, shares repo context loading, supports worktree isolation.",

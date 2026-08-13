@@ -86,7 +86,7 @@ Full roster, model pinning, and background-run mechanics:
 Verification is a separate agent, never self-assessment.
 
 ```
-Agent(subagent_type: "verifier", prompt: <spec path + wave scope + the diff to review>)
+Agent(subagent_type: "orchestrator:verifier", prompt: <spec path + wave scope + the diff to review>)
 ```
 
 Add an adversarial second opinion from a different model family when the change is risky —
