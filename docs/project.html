@@ -1,0 +1,313 @@
+<title>Harness Control</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --paper:oklch(0.968 0.008 96);--card:oklch(0.997 0.002 96);--sunk:oklch(0.951 0.009 96);
+  --hair:oklch(0.909 0.008 96);--hair-2:oklch(0.944 0.006 96);
+  --ink:oklch(0.268 0.010 70);--ink-2:oklch(0.508 0.010 74);--ink-3:oklch(0.672 0.010 78);
+  --celadon:oklch(0.585 0.055 155);--celadon-wash:oklch(0.951 0.021 150);
+  --warn:oklch(0.520 0.088 82);--warn-wash:oklch(0.955 0.022 82);
+  --bad:oklch(0.448 0.135 30);--bad-wash:oklch(0.959 0.024 30);
+  --lift:0 1px 2px oklch(0.268 0.010 70/.045),0 10px 24px -18px oklch(0.268 0.010 70/.16);
+  --face:"Helvetica Neue",Helvetica,"Segoe UI Variable Text","Segoe UI",sans-serif;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Songti SC","Times New Roman",serif;
+  --mono:"SF Mono",SFMono-Regular,"JetBrains Mono","IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:oklch(0.180 0.008 72);--card:oklch(0.216 0.008 72);--sunk:oklch(0.246 0.008 72);
+    --hair:oklch(0.318 0.008 72);--hair-2:oklch(0.268 0.008 72);
+    --ink:oklch(0.921 0.006 92);--ink-2:oklch(0.740 0.008 86);--ink-3:oklch(0.576 0.010 80);
+    --celadon:oklch(0.760 0.070 155);--celadon-wash:oklch(0.276 0.030 152);
+    --warn:oklch(0.800 0.090 84);--warn-wash:oklch(0.286 0.036 84);
+    --bad:oklch(0.735 0.115 30);--bad-wash:oklch(0.288 0.046 30);
+    --lift:0 1px 2px oklch(0 0 0/.4),0 10px 24px -18px oklch(0 0 0/.7);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:oklch(0.180 0.008 72);--card:oklch(0.216 0.008 72);--sunk:oklch(0.246 0.008 72);
+  --hair:oklch(0.318 0.008 72);--hair-2:oklch(0.268 0.008 72);
+  --ink:oklch(0.921 0.006 92);--ink-2:oklch(0.740 0.008 86);--ink-3:oklch(0.576 0.010 80);
+  --celadon:oklch(0.760 0.070 155);--celadon-wash:oklch(0.276 0.030 152);
+  --warn:oklch(0.800 0.090 84);--warn-wash:oklch(0.286 0.036 84);
+  --bad:oklch(0.735 0.115 30);--bad-wash:oklch(0.288 0.046 30);
+  --lift:0 1px 2px oklch(0 0 0/.4),0 10px 24px -18px oklch(0 0 0/.7);
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--face);font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px 110px}
+.col{max-width:70ch}
+h1,h2,h3{font-family:var(--serif);font-weight:600;text-wrap:balance}
+h1{font-size:44px;line-height:1.08;letter-spacing:-.015em;margin:0 0 16px}
+h2{font-size:15px;font-family:var(--mono);font-weight:600;letter-spacing:.16em;
+   text-transform:uppercase;color:var(--celadon);margin:0 0 20px;
+   padding-bottom:10px;border-bottom:1px solid var(--hair)}
+h3{font-size:19px;margin:34px 0 8px;letter-spacing:-.005em}
+p{margin:0 0 15px;text-wrap:pretty}
+a{color:var(--celadon);text-underline-offset:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--celadon);outline-offset:3px;border-radius:2px}
+code{font-family:var(--mono);font-size:.86em;background:var(--sunk);padding:2px 6px;border-radius:3px}
+strong{font-weight:640}
+section{margin-bottom:64px}
+.lede{color:var(--ink-2);font-size:17.5px}
+
+header{padding:76px 0 30px;margin-bottom:52px;border-bottom:1px solid var(--hair);position:relative}
+.kanji{font-family:var(--serif);font-size:30px;letter-spacing:.1em;color:var(--ink);margin:0 0 18px}
+.kanji span{font-family:var(--mono);font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink-3);margin-left:14px;vertical-align:middle}
+.sub{font-size:19px;color:var(--ink-2);max-width:62ch;margin:0;text-wrap:pretty}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.meta span{border:1px solid var(--hair);border-radius:3px;padding:4px 9px}
+
+.scroll{overflow-x:auto;margin:0 0 18px;border:1px solid var(--hair);
+  border-radius:7px;box-shadow:var(--lift);background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:14.5px}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--hair-2);vertical-align:top}
+thead th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;background:var(--sunk);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td.m,th.m{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+.num{text-align:right;font-family:var(--mono);font-size:13px}
+
+/* waves are a real sequence, so they are numbered */
+ol.waves{list-style:none;counter-reset:w;margin:0;padding:0;display:flex;flex-direction:column;gap:30px}
+ol.waves>li{counter-increment:w;display:grid;grid-template-columns:40px 1fr;gap:18px}
+ol.waves>li::before{
+  content:counter(w);font-family:var(--mono);font-size:12.5px;font-weight:600;
+  color:var(--celadon);background:var(--celadon-wash);border-radius:5px;
+  height:28px;display:flex;align-items:center;justify-content:center}
+ol.waves h3{margin:1px 0 6px;font-size:17px}
+ol.waves p{margin-bottom:8px}
+
+/* the bug ledger is the spine of the story, but it is not a sequence */
+.bug{border-left:3px solid var(--bad);background:var(--bad-wash);
+  padding:15px 18px;margin:0 0 12px;border-radius:0 6px 6px 0}
+.bug.mine{border-left-color:var(--warn);background:var(--warn-wash)}
+.bug h3{margin:0 0 6px;font-size:16px;font-family:var(--face);font-weight:640}
+.bug p{margin:0 0 6px;font-size:14.5px;color:var(--ink-2)}
+.bug p:last-child{margin:0}
+.bug .who{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:5px}
+.bug code{background:oklch(0.5 0 0/.09)}
+
+pre{font-family:var(--mono);font-size:13px;line-height:1.7;background:var(--card);
+  border:1px solid var(--hair);border-radius:7px;padding:15px 17px;margin:0 0 18px;
+  overflow-x:auto;box-shadow:var(--lift)}
+.note{border-left:3px solid var(--celadon);background:var(--celadon-wash);
+  padding:14px 18px;border-radius:0 6px 6px 0;margin:0 0 18px;font-size:15px}
+.note p{margin:0}
+details{border:1px solid var(--hair);border-radius:7px;background:var(--card);margin-bottom:10px}
+summary{cursor:pointer;padding:13px 17px;font-weight:620;font-size:15px;list-style-position:inside}
+details[open] summary{border-bottom:1px solid var(--hair-2)}
+.dbody{padding:15px 17px 4px}
+.dbody>*:last-child{margin-bottom:15px}
+footer{border-top:1px solid var(--hair);padding-top:24px;font-size:13.5px;color:var(--ink-3)}
+@media (max-width:640px){
+  h1{font-size:32px}.wrap{padding:0 18px 70px}header{padding-top:44px}
+  ol.waves>li{grid-template-columns:30px 1fr;gap:13px}
+}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="kanji">調和<span>Harmony in orchestration</span></p>
+  <h1>Harness Control</h1>
+  <p class="sub">A Claude Code plugin that plans, delegates and verifies — where roles and harnesses are independent axes, and the tool was built by running itself.</p>
+  <div class="meta">
+    <span>36 commits</span><span>32 files</span><span>88 tests</span>
+    <span>4 harnesses</span><span>3 roles</span><span>one evening</span><span>MIT</span>
+  </div>
+</header>
+
+<section class="col">
+  <h2>The premise</h2>
+  <p class="lede">Two ideas carry the whole design.</p>
+  <p><strong>Roles and harnesses are orthogonal.</strong> A role is the job — <code>developer</code>, <code>ui-developer</code>, <code>verifier</code>. A harness is the model executing it — <code>claude</code>, <code>codex</code>, <code>grok</code>, <code>pi</code>. One role definition runs on any of them, so a second opinion is genuinely comparable rather than four vendors' agents each doing things their own way.</p>
+  <p><strong>The no-implement rule is enforced, not requested.</strong> In orchestrator mode a <code>PreToolUse</code> hook blocks source edits in the main session, so work reaches the tree only through an agent whose output was independently checked. The rule survives a long session because it lives in the system prompt and in a hook, not in a message that decays.</p>
+  <p>It started as a 274-line markdown file describing an orchestrator persona. The question was how to package it. The answer turned out to be: not as one thing.</p>
+</section>
+
+<section>
+  <h2>Architecture</h2>
+  <div class="col">
+    <p>Each concern went to the primitive that actually holds it. This split is the single most load-bearing decision in the project.</p>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Concern</th><th>Primitive</th><th>Why that one</th></tr></thead>
+    <tbody>
+      <tr><td>Persona that must hold every turn</td><td class="m">output style</td><td>Only output styles modify the system prompt and get adherence reminders. A skill is one message that competes with everything after it.</td></tr>
+      <tr><td>The wave workflow</td><td class="m">skill</td><td>Loads on <code>/orchestrate</code>, costs nothing until invoked.</td></tr>
+      <tr><td>Delegated jobs</td><td class="m">agents</td><td>Own context window, results return to the caller.</td></tr>
+      <tr><td>Enforcement</td><td class="m">PreToolUse hook</td><td>Skill <code>disallowed-tools</code> and skill-scoped hooks clear on the next message — they cannot hold a session-long rule.</td></tr>
+      <tr><td>Cross-harness comms</td><td class="m">MCP + REST bus</td><td><code>SendMessage</code> cannot reach a headless CLI at all. Every harness has curl.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Roles on harnesses</h3>
+  <div class="col"><p>Every model runs in the harness built for it — never Claude Code wearing another model's name. Each takes the role by flag, so nothing is written into the workspace.</p></div>
+  <div class="scroll"><table>
+    <thead><tr><th>Harness</th><th class="m">CLI</th><th class="m">Role arrives via</th><th class="m">Mode</th><th>Read-only</th></tr></thead>
+    <tbody>
+      <tr><td>claude</td><td class="m">Agent tool</td><td class="m">subagent_type</td><td class="m">session</td><td>refused — unenforceable</td></tr>
+      <tr><td>codex</td><td class="m">codex exec</td><td class="m">-c model_instructions_file=</td><td class="m">approval_policy=never</td><td>refused — unenforceable</td></tr>
+      <tr><td>grok</td><td class="m">grok -p</td><td class="m">--rules</td><td class="m">--permission-mode auto</td><td>refused — unenforceable</td></tr>
+      <tr><td>pi</td><td class="m">pi -p</td><td class="m">--append-system-prompt</td><td class="m">--approve</td><td><strong>verified</strong> — <code>--tools read</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="col"><div class="note"><p>Every flag in that table was tested against the real binary rather than read from <code>--help</code>. That is how two of three read-only claims turned out to be false.</p></div></div>
+</section>
+
+<section>
+  <h2>What shipped</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Component</th><th class="m">Path</th><th class="num">Lines</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td>Message bus</td><td class="m">scripts/agent-bus</td><td class="num">867</td><td>MCP + REST, run registry, SIGSTOP pause, long-poll wake, serves the dashboard</td></tr>
+      <tr><td>Dashboard</td><td class="m">ui/dashboard.html</td><td class="num">1793</td><td>Live control plane, both themes, inlined sumi-e</td></tr>
+      <tr><td>Test suite</td><td class="m">tests/run-tests</td><td class="num">539</td><td>88 checks, no dependencies, own port</td></tr>
+      <tr><td>Role runner</td><td class="m">scripts/run-role</td><td class="num">307</td><td>Any role on any harness, opt-in worktrees</td></tr>
+      <tr><td>Doctor</td><td class="m">scripts/orchestrator-doctor</td><td class="num">265</td><td>20 checks; proves the guard is actually enforcing</td></tr>
+      <tr><td>Guard</td><td class="m">hooks/orchestrator-guard.py</td><td class="num">200</td><td>Blocks source edits in orchestrator mode; parses shell at command position</td></tr>
+      <tr><td>Board</td><td class="m">scripts/agent-board</td><td class="num">186</td><td>Reads the bus log with no server running</td></tr>
+    </tbody>
+  </table></div>
+  <div class="col">
+    <p>Plus three role definitions, two output styles, two skills, the plugin manifest and hooks, a spec, a design brief, and a canvas Flappy-Bird game used as a smoke test for whether the <code>developer</code> role generalises past information-shaped work. It does.</p>
+  </div>
+</section>
+
+<section>
+  <h2>How it was built</h2>
+  <div class="col"><p>Five waves, each delegated and verified before the next. The tool ran itself from wave 1 onward.</p></div>
+  <ol class="waves">
+    <li><div>
+      <h3>Packaging</h3>
+      <p>Split into output style, skill, agents and hook; packaged as a plugin with its own marketplace. Established that enforcement had to be a hook because skill-scoped restrictions clear on the next message.</p>
+    </div></li>
+    <li><div>
+      <h3>Data foundation — two tasks, concurrent, in worktrees</h3>
+      <p>A run registry in the bus: open, stage, pause, resume, close, persisted per channel. And <code>run-role</code> restructured from <code>exec</code> to a child process so a PID exists for the bus to signal, with exit codes propagated faithfully and INT/TERM closing the run rather than orphaning it.</p>
+    </div></li>
+    <li><div>
+      <h3>The ink shell</h3>
+      <p>A design arrived as a canvas mockup. Translated to vanilla JS against the live API — sidebar, wave flow, balance enso, harness garden, traffic feed. Every figure traces to a real field; the success rate reads <code>9 of 62</code> rather than a fabricated percentage, and nav entries with no backing data say <strong>NOT YET</strong>.</p>
+    </div></li>
+    <li><div>
+      <h3>Polish</h3>
+      <p>Explicit theme control, a painted SVG enso replacing a CSS border arc, the Mincho wordmark, per-harness marks, and a fix for failure rendering in the success colour. The washes were stretched so they read as paper rather than corner stickers.</p>
+    </div></li>
+    <li><div>
+      <h3>Verification</h3>
+      <p>Test coverage for the run registry — 61 checks to 88 — proving pause by freezing a real child process and watching its output stop. Independent verification runs on codex, deliberately not the harness that wrote the code.</p>
+    </div></li>
+  </ol>
+</section>
+
+<section>
+  <h2>The bug ledger</h2>
+  <div class="col">
+    <p class="lede">The most useful output of the evening. Every one was found by running the thing, not by reasoning about it — and the majority were in my own code.</p>
+    <p>Amber entries are bugs I wrote. Red are bugs an agent found or that shipped in someone else's code.</p>
+  </div>
+
+  <div class="bug mine">
+    <span class="who">found by the dashboard, in my code</span>
+    <h3>Enforcement was silently off for every user</h3>
+    <p>Plugin output styles are stored namespaced — <code>orchestrator:Orchestrator</code>. The guard compared against the bare name, never matched, and returned early. Installing as a plugin is the only supported path, so the plugin's central safety property did nothing.</p>
+    <p>The doctor had the identical blind spot: it reported the style as unset while its guard self-test passed, because the guard was correctly doing nothing for a style it did not recognise. <strong>A self-test that shares the blind spot of the thing it tests is not a test.</strong></p>
+  </div>
+
+  <div class="bug mine">
+    <span class="who">exposed by fixing the previous one</span>
+    <h3>Fixing the guard broke delegation</h3>
+    <p>The guard exempted subagents via <code>agent_id</code>. A <code>run-role</code> harness is a top-level session and has none — indistinguishable from an orchestrator. The moment the style matched, every delegated write was denied. A wave died after 25 minutes having written nothing.</p>
+    <p>Delegation had only ever worked <em>because the guard was broken</em>. Wave 1a reported "File Edit/Write tools were blocked" and I attributed it to something else and moved on.</p>
+  </div>
+
+  <div class="bug">
+    <span class="who">found by studying Intent</span>
+    <h3>Read-only was a bluff on two of three harnesses</h3>
+    <p><code>--read-only</code> was accepted and enforced nothing on codex and grok. Verified by trying to breach each: pi's <code>--tools read</code> removes the tools and holds; codex's sandbox governs shell commands but not its own patch tool; grok's tool denylist leaves other paths open. Both overwrote the target file.</p>
+    <p>It now refuses on any harness that cannot back it. The same bluff ships in Intent's own Coordinator, which asserts "you have no file editing tools" where nothing is removed.</p>
+  </div>
+
+  <div class="bug">
+    <span class="who">found by studying Agent Orchestrator</span>
+    <h3>The role file would have made worktrees undeletable</h3>
+    <p>Writing the role to <code>AGENTS.md</code> worked — both CLIs read it. But an untracked file makes <code>git worktree remove</code> refuse, and that is the exact command <code>run-role</code> prints for you. The tool would have sabotaged its own instructions.</p>
+    <p>Every CLI takes the role by flag instead, so nothing is written into the workspace.</p>
+  </div>
+
+  <div class="bug mine">
+    <span class="who">found by the user, looking at the screen</span>
+    <h3>A failed run rendered in the success colour</h3>
+    <p>The flow card chose its highlighted stage by position and always painted it celadon. A run that failed appeared inside a green card reading "Last run failed". A glance said pass.</p>
+    <p>It survived the agent's verification, my review, and 61 tests — because every one checked that the data was right, and the data <em>was</em> right. Only the colour lied. <strong>The suite has no way to see colour.</strong></p>
+  </div>
+
+  <div class="bug mine">
+    <span class="who">found by the user, from a stale card</span>
+    <h3>The codex harness was dead, and every run was titled "## Task"</h3>
+    <p><code>--ask-for-approval</code> is a top-level codex flag; <code>codex exec</code> rejects it outright. Added while enabling auto mode, never re-tested, so the harness had been broken since. A verification wave died in two seconds.</p>
+    <p>Separately, run titles came from the brief's first line — which in any well-formed brief is a markdown heading. The registry filled with runs called <code>## Task</code>.</p>
+  </div>
+
+  <div class="bug mine">
+    <span class="who">found by an agent, in my test suite</span>
+    <h3>Fifteen guard tests passed vacuously</h3>
+    <p>Tests run inside a delegated harness inherit <code>ORCHESTRATOR_DELEGATE</code>, and the guard exempts on it. So fifteen checks asserting denial were asserting it from a context that is deliberately never denied. The agent's first full run came back <code>73 passed, 15 failed</code> and it reported the diagnosis rather than just making the number green.</p>
+  </div>
+
+  <details>
+    <summary>Six more, briefly</summary>
+    <div class="dbody">
+      <p><strong>Three cwd-relative resolution bugs.</strong> <code>agent-bus stop</code> found the server through a file relative to the current directory, so a bus started elsewhere was invisible while its port stayed held. The dashboard was resolved from <code>abspath(__file__)</code>, which points beside the symlink rather than beside the plugin, so the documented way to start the bus served a placeholder. And the doctor shelled out to <code>claude mcp list</code>, which is cwd-scoped, so it told you to run a command you had already run.</p>
+      <p><strong>The orchestrator could never commit</strong>, even when asked, because the guard blocked all mutating git. Now <code>ORCHESTRATOR_COMMIT=1</code> makes the authorisation visible in the transcript rather than hidden in a config flag.</p>
+      <p><strong><code>/status</code> took 6.2 seconds</strong>, shelling out to the doctor on every request. Cached to 12ms with an instant path.</p>
+      <p><strong>The offline banner invented a timestamp.</strong> A failed request set the "last seen" clock, so a cold start with no bus claimed "the last response received, 10 seconds ago" over empty sections.</p>
+      <p><strong>The dashboard hardcoded its own port</strong> in three places including its API base. Setting the documented <code>AGENT_BUS_PORT</code> loaded the page from one port while it called another — permanently offline against a healthy bus.</p>
+      <p><strong>Two plugins failed to load</strong> because their manifest named <code>hooks/hooks.json</code>, which is auto-loaded already. Ours, and <code>pi-plugin-cc</code> — fixed upstream in <a href="https://github.com/Agents365-ai/pi-plugin-cc/pull/28">a PR</a>.</p>
+    </div>
+  </details>
+</section>
+
+<section class="col">
+  <h2>What two prior implementations taught</h2>
+  <p>Two teams had built this before. Reading their source was the cheapest research available, and each caught a bug about to ship.</p>
+  <h3>Agent Orchestrator</h3>
+  <p>Its adapter layer renders the system prompt to both a string and a file every launch and lets each harness pick — six distinct injection families across 26 adapters. That is where the flag-based approach came from, and with it the discovery that the workspace file would break worktree cleanup. Its capability model is a fail-closed table validated when a binding is written rather than at launch, which is the shape the read-only refusal now takes.</p>
+  <h3>Intent by Augment</h3>
+  <p>Its specialists carry a <code>roleReminder</code> pinned last in the system prompt as non-truncatable, <em>and</em> re-emitted on every user turn — explicitly to fight attention decay. Single-shot invocations have no turns to hook, but the recency half transfers, and each role now carries one appended to the end of both the role and the brief. Both prior implementations converged on this independently, which is the strongest signal either of them offered.</p>
+  <p>What was deliberately not copied: their daemons, SQLite, CDC, SSE and desktop shells. That machinery exists to serve a GUI and a phone. A single developer with a local bus needs none of it.</p>
+</section>
+
+<section class="col">
+  <h2>Install</h2>
+  <pre>/plugin marketplace add maplenk/claude-orchestrator
+/plugin install orchestrator@orchestrator-marketplace
+/config → Output style → Orchestrator</pre>
+  <p>Nothing activates until the output style is selected — the guard, the workflow and the harness prompt are all inert otherwise. A <code>SessionStart</code> hook links five tools onto <code>~/.claude/bin</code> and starts the bus on <code>127.0.0.1:8477</code>, which also serves the dashboard.</p>
+  <pre>orchestrator-doctor                     # 20 checks, each with its fix
+run-role developer --harness grok -- "&lt;brief&gt;"
+run-role verifier  --harness codex --worktree -- "&lt;brief&gt;"
+tests/run-tests                         # 88 checks</pre>
+  <div class="note"><p>Installing from a local path copies the repo into the plugin cache, and <code>/reload-plugins</code> will not re-copy while the version is unchanged. Bump the version or rsync the cache — otherwise you are running an older build than the one you are editing.</p></div>
+</section>
+
+<section class="col">
+  <h2>Open</h2>
+  <p><strong>Independent verification is still in flight</strong> on codex, against the spec's acceptance criteria. It is the last wave and the one that matters most, because grok wrote every line of the dashboard and cannot neutrally review it.</p>
+  <p><strong>Two states have never been rendered.</strong> The enso's failure variant and the flow card's blocked variant exist in code and resolve their tokens, but neither has been produced on screen. That is the same class of risk as the fifteen vacuous tests — a branch that has never fired is only probably wired.</p>
+  <p><strong>The role is not re-injected on resume.</strong> A system prompt lives in flags, not in the transcript, so a resumed session would silently lose its role. There is no resume yet; this becomes a bug the day there is.</p>
+  <p><strong>Role bodies are not content-addressed.</strong> Editing <code>agents/verifier.md</code> mid-flight changes what a running task is being judged by. Agent Orchestrator pins a digest per session and replays from it.</p>
+</section>
+
+<footer>
+  Built in one evening across claude, codex, grok and pi. The dashboard renders its own orchestration — the traffic feed shows the agents that wrote it, reporting as they worked. Roles adapted from the specialist model in Agent Orchestrator and Intent, rebuilt on Claude Code primitives.
+</footer>
+</div>
