@@ -86,6 +86,12 @@ if [[ $WORKTREE -eq 1 ]]; then
   echo "run-role: remove with — git -C \"$REPO_ROOT\" worktree remove $WT_DIR" >&2
 fi
 
+# Mark this process tree as the implementor. The PreToolUse guard exempts
+# subagents by agent_id, but a harness launched here is a top-level session with
+# none — without this it would be treated as an orchestrator and blocked from
+# writing anything.
+export ORCHESTRATOR_DELEGATE="$ROLE"
+
 echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 
 # Report this delegation as a run so the dashboard can show it and the

@@ -84,6 +84,12 @@ def main():
     # Subagents and teammates do the implementing. Only guard the main session.
     if event.get("agent_id"):
         return
+    # A run-role harness is a top-level `claude -p` session, so it has no agent_id
+    # — it looks exactly like an orchestrator to this hook. It is the implementor,
+    # so run-role marks it in the environment the hook inherits. Without this the
+    # guard blocks every delegated write and delegation silently stops working.
+    if os.environ.get("ORCHESTRATOR_DELEGATE"):
+        return
     cwd = event.get("cwd") or os.getcwd()
     if not is_orchestrator(output_style(cwd)):
         return

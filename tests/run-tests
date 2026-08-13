@@ -81,6 +81,15 @@ def suite_guard():
     ok("subagent may write source", not write("app/x.php", agent="sub-1"))
     ok("subagent may run mutating git", not bash("git commit -m x", agent="sub-1"))
 
+    # a run-role harness is a top-level session with no agent_id, so it needs its
+    # own exemption — without it the guard silently blocks all delegated writes
+    env = dict(os.environ, ORCHESTRATOR_DELEGATE="ui-developer")
+    p = subprocess.run([sys.executable, GUARD],
+                       input=json.dumps({"cwd": tmp, "tool_name": "Write",
+                                         "tool_input": {"file_path": "ui/dashboard.html"}}),
+                       capture_output=True, text=True, timeout=20, env=env)
+    ok("delegated harness may write source", not p.stdout.strip(), p.stdout[:120])
+
     # the core rule
     ok("denies source write", write("app/v3/OrderReport.php"))
     ok("denies unrelated docs write", write("docs/other.md"))
