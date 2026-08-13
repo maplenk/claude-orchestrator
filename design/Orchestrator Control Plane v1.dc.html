@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<title>Orchestrator · Control plane</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --paper:#FBFAF8;--panel:#FFFFFF;--sunk:#F2F1ED;
+  --ink:#15181F;--ink-2:#454B58;--ink-3:#6E7585;
+  --rule:#DFDDD6;--rule-2:#EAE8E2;
+  --accent:#2D5BD1;--accent-soft:#E8EDFB;
+  --ok:#1B7A4B;--ok-soft:#E4F2EA;
+  --warn:#9A6B08;--warn-soft:#F8EFDC;
+  --bad:#B23A2E;--bad-soft:#FAE8E5;
+  --off:#5C6370;--off-soft:#ECECEF;
+  --shadow:0 1px 2px rgba(20,24,35,.05),0 8px 24px -16px rgba(20,24,35,.25);
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#11141B;--panel:#171B24;--sunk:#1D222C;
+    --ink:#E9EAEE;--ink-2:#A8AEBC;--ink-3:#767D8D;
+    --rule:#282E39;--rule-2:#20252F;
+    --accent:#7BA4FF;--accent-soft:#1B2437;
+    --ok:#5FD39B;--ok-soft:#14261E;
+    --warn:#E0B457;--warn-soft:#2A2214;
+    --bad:#FF8A78;--bad-soft:#2E1A18;
+    --off:#9AA3B2;--off-soft:#1A1E27;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -16px rgba(0,0,0,.8);
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+button{font-family:inherit}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+a{color:var(--accent)}
+a:hover{color:var(--ink)}
+@keyframes livepulse{0%,100%{opacity:1}50%{opacity:.25}}
+[data-stale="true"]{opacity:.6;filter:saturate(.4)}
+@media (max-width:900px){[data-grid="main"]{grid-template-columns:minmax(0,1fr) !important}[data-col="right"]{position:static !important}}
+@media (max-width:420px){[data-wrap="page"]{padding:12px 12px 40px !important}}
+[data-pulse]{animation:livepulse 2.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}">
+<div style="position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:7px 16px;background:#14171E;border-bottom:1px solid rgba(255,255,255,.09)">
+  <span style="font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#7E869A;white-space:nowrap">Mockup · state</span>
+  <div style="display:flex;flex-wrap:wrap;gap:4px">
+    <sc-for list="{{ switcher }}" as="s" hint-placeholder-count="6">
+      <button type="button" onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+    </sc-for>
+  </div>
+  <div style="flex:1"></div>
+  <button type="button" onClick="{{ injectMsg }}" style="font-family:var(--mono);font-size:11px;color:#C9CEDA;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:4px 9px;cursor:pointer" style-hover="border-color:rgba(255,255,255,.45);color:#fff">+ message</button>
+</div>
+</sc-if>
+
+<div data-wrap="page" style="max-width:1320px;margin:0 auto;padding:18px 18px 56px">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:0 0 12px">
+    <h1 style="margin:0;font-size:17px;font-weight:700;letter-spacing:-.015em">Control plane</h1>
+    <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.04em">orchestrator · 127.0.0.1:8477</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;color:var(--ink-3)">
+      <span style="font-variant-numeric:tabular-nums">{{ liveLabel }}</span>
+      <button type="button" onClick="{{ refresh }}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:4px 9px;cursor:pointer" style-hover="border-color:var(--ink-3);color:var(--ink)">Refresh</button>
+    </div>
+  </header>
+
+  <!-- READINESS: one unmistakable answer -->
+  <sc-if value="{{ isFail }}" hint-placeholder-val="{{ false }}">
+    <section style="border:1px solid var(--bad);border-left:5px solid var(--bad);background:var(--bad-soft);border-radius:7px;padding:13px 15px;margin:0 0 14px;box-shadow:var(--shadow)">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--bad)">Not ready</span>
+        <span style="font-size:14px;color:var(--ink);font-weight:600">{{ readyDetail }}</span>
+      </div>
+      <p style="margin:7px 0 0;font-size:12.5px;color:var(--ink-2)">{{ readySub }}</p>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:7px 8px">
+        <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;flex:none">fix</span>
+        <code style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink);word-break:break-word">{{ topFix }}</code>
+        <button type="button" data-copy="{{ topFix }}" onClick="{{ copy }}" style="flex:none;font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;cursor:pointer" style-hover="background:var(--accent);color:var(--panel)">copy</button>
+      </div>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isWarnState }}" hint-placeholder-val="{{ true }}">
+    <section style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;border:1px solid var(--rule);border-left:5px solid var(--warn);background:var(--panel);border-radius:7px;padding:11px 15px;margin:0 0 14px">
+      <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--warn)">Ready</span>
+      <span style="font-size:13.5px;color:var(--ink)">{{ readyDetail }}</span>
+      <span style="font-size:12.5px;color:var(--ink-3)">{{ readySub }}</span>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isOk }}" hint-placeholder-val="{{ false }}">
+    <section style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;border:1px solid var(--rule);border-left:5px solid var(--ok);background:var(--panel);border-radius:7px;padding:11px 15px;margin:0 0 14px">
+      <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ok)">Ready</span>
+      <span style="font-size:13.5px;color:var(--ink)">{{ readyDetail }}</span>
+      <span style="font-size:12.5px;color:var(--ink-3)">{{ readySub }}</span>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isDegraded }}" hint-placeholder-val="{{ false }}">
+    <section style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;border:1px solid var(--rule);border-left:5px solid var(--ink-3);background:var(--panel);border-radius:7px;padding:11px 15px;margin:0 0 14px">
+      <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)">Unverified</span>
+      <span style="font-size:13.5px;color:var(--ink)">{{ readyDetail }}</span>
+      <span style="font-size:12.5px;color:var(--ink-3)">{{ readySub }}</span>
+    </section>
+  </sc-if>
+
+  <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+    <section style="border:1px solid var(--off);border-left:5px solid var(--off);background:var(--off-soft);border-radius:7px;padding:13px 15px;margin:0 0 14px">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px">
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--off)">No connection</span>
+        <span style="font-size:14px;color:var(--ink);font-weight:600">{{ readyDetail }}</span>
+      </div>
+      <p style="margin:7px 0 0;font-size:12.5px;color:var(--ink-2)">{{ readySub }}</p>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:7px 8px">
+        <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;flex:none">fix</span>
+        <code style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink);word-break:break-word">{{ topFix }}</code>
+        <button type="button" data-copy="{{ topFix }}" onClick="{{ copy }}" style="flex:none;font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;cursor:pointer" style-hover="background:var(--accent);color:var(--panel)">copy</button>
+      </div>
+    </section>
+  </sc-if>
+
+  <div data-grid="main" style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px;align-items:start">
+
+    <!-- LEFT: evidence -->
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+
+      <section style="background:var(--panel);border:1px solid var(--rule);border-radius:7px;box-shadow:var(--shadow);overflow:hidden;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 13px;background:var(--sunk);border-bottom:1px solid var(--rule-2)">
+          <h2 style="margin:0;font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);font-weight:650">Doctor</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ checksSummary }}</span>
+        </div>
+
+        <sc-if value="{{ stale }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:7px 13px;background:var(--off-soft);border-bottom:1px solid var(--rule-2);font-family:var(--mono);font-size:11px;color:var(--ink-2)">not verified since the bus went away — showing the last result, 34s ago</div>
+        </sc-if>
+
+        <sc-if value="{{ doctorMissing }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 13px;font-size:13px;color:var(--ink-2);max-width:70ch">
+            <p style="margin:0 0 8px">No doctor data — <code style="font-family:var(--mono);font-size:12px;background:var(--sunk);padding:1px 5px;border-radius:3px">orchestrator-doctor</code> is not installed, so nothing here is verified. Harnesses, agents and the message bus are unaffected and still live.</p>
+            <div style="display:flex;align-items:flex-start;gap:8px;background:var(--sunk);border:1px solid var(--rule);border-radius:5px;padding:7px 8px">
+              <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;flex:none">fix</span>
+              <code style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:var(--ink);word-break:break-word">restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin</code>
+              <button type="button" data-copy="restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin" onClick="{{ copy }}" style="flex:none;font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;cursor:pointer" style-hover="background:var(--accent);color:var(--panel)">copy</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasFails }}" hint-placeholder-val="{{ false }}">
+          <div data-stale="{{ staleAttr }}">
+            <div style="padding:9px 13px 4px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--bad);font-weight:700">Required — blocking</div>
+            <sc-for list="{{ fails }}" as="c" hint-placeholder-count="1">
+              <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:3px 10px;padding:9px 13px;border-left:3px solid var(--bad);background:linear-gradient(90deg,var(--bad-soft),transparent 72%)">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--bad);border:1px solid var(--bad);border-radius:3px;padding:1px 0;text-align:center;height:fit-content">fail</span>
+                <div style="min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px">
+                  <span style="font-size:13px;font-weight:650;color:var(--ink)">{{ c.name }}</span>
+                  <span style="font-size:12px;color:var(--ink-2)">{{ c.detail }}</span>
+                </div>
+                <div style="grid-column:2;display:flex;align-items:flex-start;gap:8px;margin-top:3px;background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:6px 8px">
+                  <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;flex:none">fix</span>
+                  <code style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink);word-break:break-word">{{ c.fix }}</code>
+                  <button type="button" data-copy="{{ c.fix }}" onClick="{{ copy }}" style="flex:none;font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;padding:3px 8px;cursor:pointer" style-hover="background:var(--accent);color:var(--panel)">copy</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasWarns }}" hint-placeholder-val="{{ true }}">
+          <div data-stale="{{ staleAttr }}" style="border-top:1px solid var(--rule-2)">
+            <div style="padding:9px 13px 4px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700">Optional — works without</div>
+            <sc-for list="{{ warns }}" as="c" hint-placeholder-count="2">
+              <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:3px 10px;padding:8px 13px;border-left:3px solid var(--warn)">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);border-radius:3px;padding:1px 0;text-align:center;height:fit-content">warn</span>
+                <div style="min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px">
+                  <span style="font-size:13px;font-weight:600;color:var(--ink)">{{ c.name }}</span>
+                  <span style="font-size:12px;color:var(--ink-2)">{{ c.detail }}</span>
+                </div>
+                <div style="grid-column:2;display:flex;align-items:flex-start;gap:8px;margin-top:3px;background:var(--sunk);border:1px solid var(--rule-2);border-radius:5px;padding:6px 8px">
+                  <span style="font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;flex:none">fix</span>
+                  <code style="flex:1;min-width:0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink-2);word-break:break-word">{{ c.fix }}</code>
+                  <button type="button" data-copy="{{ c.fix }}" onClick="{{ copy }}" style="flex:none;font-family:var(--mono);font-size:10.5px;color:var(--ink-2);background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:3px 8px;cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent)">copy</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasDoctor }}" hint-placeholder-val="{{ true }}">
+          <div style="border-top:1px solid var(--rule-2)">
+            <button type="button" onClick="{{ togglePassing }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:8px 13px;background:transparent;border:0;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--ink-3);text-align:left" style-hover="color:var(--ink)">
+              <span style="font-size:9px">{{ passingCaret }}</span>{{ passingLabel }}
+            </button>
+            <sc-if value="{{ showPassing }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:0 0 4px">
+                <sc-for list="{{ passes }}" as="c" hint-placeholder-count="6">
+                  <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px;padding:4px 13px;align-items:baseline">
+                    <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);text-align:center">ok</span>
+                    <div style="min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px">
+                      <span style="font-size:12.5px;color:var(--ink);font-family:var(--mono)">{{ c.name }}</span>
+                      <span style="font-size:12px;color:var(--ink-3)">{{ c.detail }}</span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </section>
+
+      <!-- HARNESSES -->
+      <section style="background:var(--panel);border:1px solid var(--rule);border-radius:7px;box-shadow:var(--shadow);overflow:hidden;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 13px;background:var(--sunk);border-bottom:1px solid var(--rule-2)">
+          <h2 style="margin:0;font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);font-weight:650">Harnesses</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ harnessSummary }}</span>
+        </div>
+        <sc-if value="{{ stale }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:7px 13px;background:var(--off-soft);border-bottom:1px solid var(--rule-2);font-family:var(--mono);font-size:11px;color:var(--ink-2)">last known — availability cannot be re-probed while the bus is down</div>
+        </sc-if>
+        <div data-stale="{{ staleAttr }}" style="overflow-x:auto">
+          <div style="min-width:560px">
+            <div style="display:grid;grid-template-columns:44px 108px minmax(120px,1fr) minmax(190px,1.3fr);gap:10px;padding:6px 13px;border-bottom:1px solid var(--rule-2);font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">
+              <span></span><span>harness</span><span>model</span><span>delegate</span>
+            </div>
+            <sc-for list="{{ harnessesUp }}" as="h" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:44px 108px minmax(120px,1fr) minmax(190px,1.3fr);gap:4px 10px;padding:9px 13px;border-bottom:1px solid var(--rule-2);align-items:baseline">
+                <span style="font-family:var(--mono);font-size:11px;color:var(--ok)">ok</span>
+                <div style="min-width:0">
+                  <div style="font-family:var(--mono);font-size:13px;font-weight:650;color:var(--ink)">{{ h.name }}</div>
+                  <div style="font-size:11px;color:var(--ink-3);margin-top:1px">{{ h.tag }}</div>
+                </div>
+                <div style="min-width:0;font-family:var(--mono);font-size:12px;color:var(--ink);word-break:break-word">{{ h.model }}<div style="font-family:var(--sans);font-size:11px;color:var(--ink-3);margin-top:2px">{{ h.detail }}</div></div>
+                <button type="button" title="Copy delegate command" data-copy="{{ h.delegate }}" onClick="{{ copy }}" style="min-width:0;text-align:left;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);background:var(--sunk);border:1px solid var(--rule-2);border-radius:4px;padding:4px 7px;word-break:break-word;cursor:copy" style-hover="border-color:var(--accent);color:var(--accent)">{{ h.delegate }}</button>
+              </div>
+            </sc-for>
+            <sc-for list="{{ harnessesDown }}" as="h" hint-placeholder-count="0">
+              <div style="display:grid;grid-template-columns:44px 108px minmax(120px,1fr) minmax(190px,1.3fr);gap:4px 10px;padding:9px 13px;border-bottom:1px solid var(--rule-2);align-items:baseline">
+                <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">off</span>
+                <div style="min-width:0">
+                  <div style="font-family:var(--mono);font-size:13px;color:var(--ink-2)">{{ h.name }}</div>
+                  <div style="font-size:11px;color:var(--ink-3);margin-top:1px">{{ h.tag }}</div>
+                </div>
+                <div style="min-width:0;font-family:var(--mono);font-size:12px;color:var(--ink-3)">—<div style="font-family:var(--sans);font-size:11px;color:var(--ink-3);margin-top:2px">{{ h.detail }}</div></div>
+                <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3)">not delegable</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="padding:8px 13px;border-top:1px solid var(--rule-2);background:var(--sunk);font-family:var(--mono);font-size:11px;color:var(--ink-3)">roles <b style="color:var(--ink-2);font-weight:650">{{ rolesLine }}</b> — any role runs on any available harness</div>
+      </section>
+    </div>
+
+    <!-- RIGHT: live traffic, always in view -->
+    <div data-col="right" style="display:flex;flex-direction:column;gap:14px;min-width:0;position:sticky;top:52px">
+
+      <section style="background:var(--panel);border:1px solid var(--rule);border-radius:7px;box-shadow:var(--shadow);overflow:hidden;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 13px;background:var(--sunk);border-bottom:1px solid var(--rule-2)">
+          <h2 style="margin:0;font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);font-weight:650">Feed <span style="color:var(--ink-3);text-transform:none;letter-spacing:0">· {{ channel }}</span></h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ feedCount }}</span>
+        </div>
+
+        <sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:7px 13px;background:var(--off-soft);border-bottom:1px solid var(--rule-2);font-family:var(--mono);font-size:11px;color:var(--ink-2)">stale — last message received {{ staleFor }} ago</div>
+        </sc-if>
+
+        <div ref="{{ feedRef }}" tabindex="0" style="max-height:min(58vh,520px);overflow:auto;overscroll-behavior:contain;min-width:0">
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:62px minmax(0,1fr);gap:2px 9px;padding:8px 13px;border-bottom:1px solid var(--rule-2);min-width:0">
+              <time style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;padding-top:2px">{{ m.time }}</time>
+              <div style="min-width:0">
+                <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 6px;font-family:var(--mono);font-size:11.5px;margin-bottom:2px">
+                  <span style="color:var(--accent);font-weight:650">{{ m.from }}</span>
+                  <span style="color:var(--ink-3)">→</span>
+                  <span style="color:var(--ink);font-weight:650">{{ m.to }}</span>
+                  <sc-if value="{{ m.hasTopic }}" hint-placeholder-val="{{ true }}">
+                    <span style="color:var(--ink-3);background:var(--sunk);border:1px solid var(--rule-2);border-radius:3px;padding:0 5px;font-size:10.5px">{{ m.topic }}</span>
+                  </sc-if>
+                </div>
+                <p style="margin:0;font-size:12.5px;line-height:1.45;color:var(--ink);word-break:break-word;text-wrap:pretty">{{ m.msg }}</p>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noMessages }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:20px 13px;font-size:12.5px;color:var(--ink-3);max-width:52ch">Nothing on this channel yet. Normal before a wave starts — messages appear here as agents register and talk.</div>
+          </sc-if>
+        </div>
+      </section>
+
+      <section style="background:var(--panel);border:1px solid var(--rule);border-radius:7px;box-shadow:var(--shadow);overflow:hidden;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 13px;background:var(--sunk);border-bottom:1px solid var(--rule-2)">
+          <h2 style="margin:0;font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-2);font-weight:650">Agents</h2>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ agentCount }}</span>
+        </div>
+        <sc-for list="{{ agentsFresh }}" as="a" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 84px;gap:12px;align-items:baseline;padding:7px 13px;border-bottom:1px solid var(--rule-2)">
+            <span style="font-family:var(--mono);font-size:12.5px;font-weight:650;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span>
+            <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap">{{ a.idle }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ hasIdleAgents }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:7px 13px 3px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">quiet over a minute</div>
+        </sc-if>
+        <sc-for list="{{ agentsIdle }}" as="a" hint-placeholder-count="2">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 84px;gap:12px;align-items:baseline;padding:7px 13px;border-bottom:1px solid var(--rule-2)">
+            <span style="font-family:var(--mono);font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span>
+            <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap">{{ a.idle }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ noAgents }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 13px;font-size:12.5px;color:var(--ink-3);max-width:52ch">No agents registered. They appear the moment one calls <code style="font-family:var(--mono);font-size:11.5px;background:var(--sunk);padding:1px 4px;border-radius:3px">register</code> on the bus.</div>
+        </sc-if>
+      </section>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;healthy&quot;,&quot;gaps&quot;,&quot;broken&quot;,&quot;degraded&quot;,&quot;offline&quot;,&quot;empty&quot;],&quot;default&quot;:&quot;healthy&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Mockup&quot;},&quot;showPassing&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Mockup&quot;},&quot;showMockBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Mockup&quot;}}">
+const CHECKS = [
+  ["plugin manifest valid", "ok", "orchestrator@0.1.0 loaded", "", true],
+  ["plugin hook manifests", "ok", "no duplicate-hooks conflicts", "", true],
+  ["tools on ~/.claude/bin", "ok", "all four linked", "", true],
+  ["SessionStart hook installed", "ok", "runs on every session", "", true],
+  ["orchestrator guard active", "ok", "source edits blocked in main session", "", true],
+  ["Orchestrator output style", "ok", "current: Orchestrator", "", false],
+  ["agent bus registered as MCP", "ok", "registered", "", false],
+  ["agent bus reachable", "ok", "127.0.0.1:8477 responding", "", true],
+  ["board directory writable", "ok", ".claude/orchestrator/board", "", true],
+  ["board gitignored", "ok", "log stays out of commits", "", false],
+  ["role: developer", "ok", "packaged", "", true],
+  ["role: ui-developer", "ok", "packaged", "", false],
+  ["role: verifier", "ok", "packaged", "", true],
+  ["harnesses.json readable", "ok", "4 registered, default claude", "", false],
+  ["harness: claude", "ok", "built-in, worktree isolation", "", true],
+  ["harness: codex", "ok", "3 model(s) via CLIProxyAPI", "", false],
+  ["harness: grok", "ok", "14 model(s) via CLIProxyAPI", "", false],
+  ["harness: pi", "ok", "2 provider(s) authenticated", "", false],
+  ["usable harnesses", "ok", "claude, codex, grok, pi", "", true]
+].map(function (r) { return { name: r[0], status: r[1], detail: r[2], fix: r[3], required: r[4] }; });
+
+const GAP_WARNS = {
+  "Orchestrator output style": { status: "warn", detail: "current: Default", fix: "/config -> Output style -> Orchestrator" },
+  "agent bus registered as MCP": { status: "warn", detail: "not registered (REST still works)", fix: "claude mcp add agent-bus --transport http http://127.0.0.1:8477/mcp" }
+};
+
+const HARNESSES = [
+  { name: "claude", tag: "default · built-in", model: "sonnet-4-5", detail: "worktree isolation", delegate: "Agent(orchestrator:<role>)", available: true },
+  { name: "codex", tag: "codex@openai-codex", model: "gpt-5-codex", detail: "3 model(s) via CLIProxyAPI", delegate: "run-role <role> --harness codex", available: true },
+  { name: "grok", tag: "grok-build@xai-grok-build", model: "grok-code-fast-1", detail: "14 model(s) via CLIProxyAPI", delegate: "run-role <role> --harness grok", available: true },
+  { name: "pi", tag: "@earendil-works/pi-coding-agent", model: "kimi-k2 · deepseek-v3", detail: "modelByRole: ui-developer -> kimi-k2", delegate: "run-role <role> --harness pi", available: true }
+];
+
+const MESSAGES = [
+  { time: "14:19:52", from: "orchestrator", to: "all", topic: "scope", msg: "app/auth.php is off-limits this wave" },
+  { time: "14:21:04", from: "developer", to: "orchestrator", topic: "", msg: "task 1 done; 2 tests red in OrderReportTest" },
+  { time: "14:21:40", from: "orchestrator", to: "developer", topic: "", msg: "leave them red — verifier reproduces before you patch" },
+  { time: "14:23:11", from: "ui-developer", to: "orchestrator", topic: "", msg: "dashboard.html: readiness bar + doctor list landed, dark mode checked" },
+  { time: "14:24:47", from: "verifier", to: "all", topic: "verdict", msg: "NOT APPROVED: criterion 3 unmapped" },
+  { time: "14:25:02", from: "orchestrator", to: "verifier", topic: "", msg: "map it to the offline path and re-run on grok" }
+];
+
+const AGENTS = [
+  { name: "orchestrator", idle_s: 3 },
+  { name: "developer", idle_s: 41 },
+  { name: "verifier", idle_s: 128 },
+  { name: "ui-developer", idle_s: 612 }
+];
+
+function fmtIdle(s) {
+  if (s < 60) return "idle " + s + "s";
+  const m = Math.floor(s / 60), r = s % 60;
+  return "idle " + m + "m " + (r < 10 ? "0" : "") + r + "s";
+}
+
+class Component extends DCLogic {
+  state = { st: null, showPassing: null, extra: [], now: 0 };
+  feedRef = React.createRef();
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState(s => ({ now: s.now + 1 })), 1000);
+    this.scrollFeed();
+  }
+  componentDidUpdate(prevProps) {
+    if (prevProps.initialState !== this.props.initialState) this.setState({ st: null });
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  scrollFeed() {
+    const el = this.feedRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  cur() { return this.state.st || this.props.initialState || "gaps"; }
+
+  checksFor(st) {
+    if (st === "degraded") return null;
+    if (st === "offline") st = "gaps";
+    return CHECKS.map(c => {
+      const o = Object.assign({}, c);
+      if ((st === "gaps" || st === "broken" || st === "empty") && GAP_WARNS[c.name]) Object.assign(o, GAP_WARNS[c.name]);
+      if (st === "broken" && c.name === "tools on ~/.claude/bin") {
+        o.status = "fail";
+        o.detail = "0 of 4 linked — run-role, agent-bus, agent-board, orchestrator-doctor missing";
+        o.fix = "restart the session so the SessionStart hook can link ~/.claude/bin, or: ln -sf ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/tools/* ~/.claude/bin/";
+      }
+      if (st === "broken" && c.name === "usable harnesses") { o.detail = "claude only — run-role not on PATH"; }
+      return o;
+    });
+  }
+
+  renderVals() {
+    const st = this.cur();
+    const checks = this.checksFor(st);
+    const offline = st === "offline";
+    const empty = st === "empty";
+
+    const fails = checks ? checks.filter(c => c.status === "fail") : [];
+    const warns = checks ? checks.filter(c => c.status === "warn") : [];
+    const passes = checks ? checks.filter(c => c.status === "ok") : [];
+
+    let messages = offline || empty ? (offline ? MESSAGES : []) : MESSAGES;
+    messages = messages.concat(this.state.extra).map(m => Object.assign({}, m, { hasTopic: !!m.topic, topic: m.topic ? "[" + m.topic + "]" : "" }));
+    const agents = empty ? [] : AGENTS;
+
+    const showPassing = this.state.showPassing == null ? !!this.props.showPassing : this.state.showPassing;
+
+    let readyDetail = "", readySub = "", topFix = "";
+    if (st === "healthy") {
+      readyDetail = "All 19 checks pass.";
+      readySub = "4 harnesses usable — claude, codex, grok, pi.";
+    } else if (st === "gaps" || st === "empty") {
+      readyDetail = "All required checks pass — 2 optional gaps.";
+      readySub = "Delegation works on all 4 harnesses. The gaps below are one command each.";
+    } else if (st === "broken") {
+      readyDetail = "1 required check failing — delegation will not work.";
+      readySub = "tools on ~/.claude/bin — role runs, the bus CLI and the doctor all resolve through that directory.";
+      topFix = fails.length ? fails[0].fix : "";
+    } else if (st === "degraded") {
+      readyDetail = "Health unknown — doctor not installed.";
+      readySub = "Bus, harnesses and agents are live; nothing has been verified.";
+    } else if (offline) {
+      readyDetail = "The bus at 127.0.0.1:8477 is not responding.";
+      readySub = "Everything below is the last state received, 34 seconds ago. The page recovers on the next poll.";
+      topFix = "agent-bus serve   # or start a new Claude Code session — SessionStart launches it";
+    }
+
+    const switcher = [["healthy", "healthy"], ["gaps", "healthy · gaps"], ["broken", "broken"], ["degraded", "degraded"], ["offline", "offline"], ["empty", "empty"]].map(([k, label]) => ({
+      label,
+      pick: () => this.setState({ st: k, extra: [] }, () => this.scrollFeed()),
+      style: "font-family:var(--mono);font-size:11px;border-radius:4px;padding:4px 9px;cursor:pointer;white-space:nowrap;border:1px solid " +
+        (k === st ? "#5C82E0;background:#243356;color:#DCE5FF" : "rgba(255,255,255,.14);background:transparent;color:#8E96A8")
+    }));
+
+    const harnessList = HARNESSES.map(h => {
+      const o = Object.assign({}, h);
+      if (st === "broken" && h.name !== "claude") { o.available = false; o.detail = "run-role not on PATH"; }
+      if (st === "degraded" && h.name === "pi") { o.available = false; o.detail = "pi CLI not found"; }
+      return o;
+    });
+    const up = harnessList.filter(h => h.available);
+    const down = harnessList.filter(h => !h.available);
+
+    const facts = offline
+      ? [{ k: "channel", v: "feat/dashboard" }, { k: "last seen", v: "34s ago" }, { k: "messages", v: String(MESSAGES.length) }]
+      : [
+          { k: "channel", v: "feat/dashboard" },
+          { k: "default", v: "claude" },
+          { k: "messages", v: String(messages.length) },
+          { k: "cursor", v: String(41 + this.state.extra.length) },
+          { k: "polling", v: "3s" }
+        ];
+
+    return {
+      showBar: this.props.showMockBar !== false,
+      switcher,
+      injectMsg: () => {
+        const d = new Date();
+        const p = n => (n < 10 ? "0" : "") + n;
+        this.setState(s => ({
+          extra: s.extra.concat([{ time: p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()), from: "developer", to: "orchestrator", topic: "", msg: "OrderReportTest green after regenerating the fixture" }])
+        }), () => this.scrollFeed());
+      },
+      refresh: () => this.setState({ now: 0 }),
+      copy: (e) => {
+        const btn = e.currentTarget, text = btn.getAttribute("data-copy") || "";
+        const done = () => { const t = btn.textContent; btn.textContent = "copied"; setTimeout(() => { btn.textContent = t; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done);
+        else done();
+      },
+      isFail: st === "broken",
+      isWarnState: st === "gaps" || st === "empty",
+      isOk: st === "healthy",
+      isDegraded: st === "degraded",
+      isOffline: offline,
+      readyDetail, readySub, topFix,
+      liveLabel: offline ? "no connection" : "updated " + (this.state.now % 3) + "s ago",
+      doctorMissing: !checks,
+      hasDoctor: !!checks,
+      hasFails: fails.length > 0,
+      hasWarns: warns.length > 0,
+      fails, warns, passes,
+      stale: offline,
+      staleAttr: offline ? "true" : null,
+      checksSummary: !checks ? "unavailable" : (offline ? "last known · 34s ago" : fails.length + " fail · " + warns.length + " warn · " + passes.length + " ok"),
+      showPassing,
+      passingCaret: showPassing ? "▼" : "▶",
+      passingLabel: (showPassing ? "hide " : "show ") + passes.length + " passing checks",
+      togglePassing: () => this.setState(s => ({ showPassing: (s.showPassing == null ? !this.props.showPassing : !s.showPassing) })),
+      harnessesUp: up,
+      harnessesDown: down,
+      harnessSummary: offline ? "last known · 34s ago" : up.length + " / " + harnessList.length + " available",
+      rolesLine: "developer · ui-developer · verifier",
+      channel: "feat/dashboard",
+      feedRef: this.feedRef,
+      messages,
+      noMessages: messages.length === 0,
+      feedCount: messages.length + (messages.length === 1 ? " message" : " messages"),
+      staleFor: "34s",
+      agentsFresh: agents.filter(a => a.idle_s < 60).map(a => ({ name: a.name, idle: fmtIdle(a.idle_s) })),
+      agentsIdle: agents.filter(a => a.idle_s >= 60).map(a => ({ name: a.name, idle: fmtIdle(a.idle_s) })),
+      noAgents: agents.length === 0,
+      agentCount: agents.length + " registered"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

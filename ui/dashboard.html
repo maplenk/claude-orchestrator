@@ -3,800 +3,382 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Orchestrator · Control Plane</title>
+<title>orchestrator · control plane</title>
 <style>
-:root {
-  color-scheme: light;
-  --paper: #FBFAF8;
-  --panel: #FFFFFF;
-  --sunk: #F2F1ED;
-  --ink: #15181F;
-  --ink-2: #454B58;
-  --ink-3: #6E7585;
-  --rule: #DFDDD6;
-  --rule-2: #EAE8E2;
-  --accent: #2D5BD1;
-  --accent-soft: #E8EDFB;
-  --ok: #1B7A4B;
-  --ok-soft: #E4F2EA;
-  --warn: #9A6B08;
-  --warn-soft: #F8EFDC;
-  --bad: #B23A2E;
-  --bad-soft: #FAE8E5;
-  --offline: #5C6370;
-  --offline-soft: #ECECEF;
-  --shadow: 0 1px 2px rgba(20, 24, 35, .05), 0 8px 24px -16px rgba(20, 24, 35, .25);
-  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --radius: 8px;
-  --focus: 2px solid var(--accent);
+:root{
+  color-scheme:light dark;
+  --paper:#F5F3EE;--panel:#FBFAF7;--sunk:#EDEAE3;
+  --ink:#14161C;--ink-2:#4A5060;--ink-3:#767C8B;
+  --rule:#D8D4CB;--rule-2:#E6E2DA;
+  --accent:#2D5BD1;--accent-soft:#E6EBFA;
+  --ok:#1B7A4B;--warn:#8F6205;--warn-soft:#F6EEDA;
+  --bad:#AE342A;--bad-soft:#F8E4E1;
+  --off:#565C6A;--off-soft:#E7E5E0;
+  --mono:"Berkeley Mono","JetBrains Mono","IBM Plex Mono",ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --paper: #11141B;
-    --panel: #171B24;
-    --sunk: #1D222C;
-    --ink: #E9EAEE;
-    --ink-2: #A8AEBC;
-    --ink-3: #767D8D;
-    --rule: #282E39;
-    --rule-2: #20252F;
-    --accent: #7BA4FF;
-    --accent-soft: #1B2437;
-    --ok: #5FD39B;
-    --ok-soft: #14261E;
-    --warn: #E0B457;
-    --warn-soft: #2A2214;
-    --bad: #FF8A78;
-    --bad-soft: #2E1A18;
-    --offline: #9AA3B2;
-    --offline-soft: #1A1E27;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#0B0D12;--panel:#10131A;--sunk:#171B23;
+    --ink:#E8E9EC;--ink-2:#A2A8B6;--ink-3:#6F7686;
+    --rule:#252A34;--rule-2:#1C2029;
+    --accent:#7BA4FF;--accent-soft:#182238;
+    --ok:#5FD39B;--warn:#DDB25A;--warn-soft:#251E10;
+    --bad:#FF8A78;--bad-soft:#2B1715;
+    --off:#98A0AE;--off-soft:#161A21;
   }
 }
-
-*, *::before, *::after { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-  max-width: 100%;
-}
-
-body {
-  min-height: 100vh;
-}
-
-:focus { outline: none; }
-:focus-visible {
-  outline: var(--focus);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-a { color: var(--accent); }
-
-.wrap {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 20px 20px 64px;
-  width: 100%;
-}
-
-/* ── Header / readiness ── */
-.masthead {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px 24px;
-  margin-bottom: 18px;
-}
-
-.brand {
-  min-width: 0;
-}
-
-.eyebrow {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin: 0 0 6px;
-}
-
-h1 {
-  font-size: 26px;
-  line-height: 1.15;
-  letter-spacing: -.02em;
-  font-weight: 700;
-  margin: 0 0 4px;
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: 14px;
-}
-
-.hero {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: min(100%, 280px);
-}
-
-.readiness {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  border: 1px solid var(--rule);
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-}
-
-.readiness::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 5px;
-  background: var(--stripe, var(--ink-3));
-}
-
-.readiness[data-state="ready"] { --stripe: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
-.readiness[data-state="warn"] { --stripe: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
-.readiness[data-state="fail"] { --stripe: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
-.readiness[data-state="offline"] { --stripe: var(--offline); background: var(--offline-soft); border-color: var(--offline); }
-.readiness[data-state="unknown"] { --stripe: var(--ink-3); }
-
-.readiness-icon {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: 14px;
-  font-weight: 700;
-  background: var(--panel);
-  border: 2px solid var(--stripe, var(--ink-3));
-  color: var(--stripe, var(--ink-3));
-}
-
-.readiness-copy { min-width: 0; flex: 1; }
-.readiness-label {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  font-weight: 650;
-  color: var(--stripe, var(--ink-3));
-  margin: 0 0 2px;
-}
-.readiness-detail {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--ink);
-  word-wrap: break-word;
-}
-
-.meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-.meta-chip {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-2);
-  border: 1px solid var(--rule);
-  background: var(--panel);
-  border-radius: 4px;
-  padding: 4px 8px;
-  white-space: nowrap;
-}
-.meta-chip strong {
-  color: var(--ink);
-  font-weight: 650;
-}
-.meta-chip .dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 5px;
-  vertical-align: 0;
-  background: var(--ok);
-}
-.meta-chip[data-live="false"] .dot { background: var(--offline); }
-.meta-chip[data-live="poll"] .dot { background: var(--warn); }
-
-/* ── Layout ── */
-.grid {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  min-width: 0;
-  overflow: hidden;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--rule-2);
-  background: var(--sunk);
-}
-
-.panel-head h2 {
-  margin: 0;
-  font-size: 12px;
-  font-family: var(--mono);
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  font-weight: 650;
-}
-
-.panel-count {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-
-.panel-body {
-  padding: 0;
-  min-width: 0;
-}
-
-/* ── Status chips ── */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  padding: 2px 7px;
-  border-radius: 3px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-  line-height: 1.4;
-}
-.chip::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  flex: 0 0 auto;
-}
-.chip.ok { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
-.chip.warn { color: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
-.chip.fail { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
-.chip.offline { color: var(--offline); background: var(--offline-soft); border-color: var(--offline); }
-.chip.neutral { color: var(--ink-2); background: var(--sunk); border-color: var(--rule); }
-.chip.required {
-  box-shadow: inset 0 0 0 1px currentColor;
-}
-
-/* ── Doctor checks ── */
-.check-group {
-  border-bottom: 1px solid var(--rule-2);
-}
-.check-group:last-child { border-bottom: 0; }
-
-.check-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px 6px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  font-weight: 650;
-}
-
-.check-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 6px;
-}
-
-.check-item {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 10px;
-  padding: 8px 14px;
-  border-left: 3px solid transparent;
-  align-items: start;
-}
-
-.check-item.fail.required {
-  border-left-color: var(--bad);
-  background: linear-gradient(90deg, var(--bad-soft), transparent 70%);
-}
-.check-item.fail:not(.required) {
-  border-left-color: var(--bad);
-  opacity: 0.92;
-}
-.check-item.warn {
-  border-left-color: var(--warn);
-}
-.check-item.ok {
-  border-left-color: transparent;
-}
-
-.check-main {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 10px;
-}
-
-.check-name {
-  font-weight: 600;
-  font-size: 13.5px;
-  color: var(--ink);
-}
-
-.check-detail {
-  font-size: 12.5px;
-  color: var(--ink-2);
-  word-break: break-word;
-}
-
-.check-fix {
-  grid-column: 2;
-  margin-top: 2px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.45;
-  background: var(--sunk);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 6px 8px;
-  color: var(--ink);
-  overflow-x: auto;
-  max-width: 100%;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.check-fix::before {
-  content: "fix · ";
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.empty-state {
-  padding: 18px 14px;
-  color: var(--ink-2);
-  font-size: 13.5px;
-}
-.empty-state code {
-  font-family: var(--mono);
-  font-size: 12px;
-  background: var(--sunk);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
-/* ── Harnesses ── */
-.harness-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.harness {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--rule-2);
-  border-left: 3px solid transparent;
-  min-width: 0;
-}
-.harness:last-child { border-bottom: 0; }
-.harness.available { border-left-color: var(--ok); }
-.harness.unavailable {
-  border-left-color: var(--ink-3);
-  opacity: .85;
-}
-.harness.default {
-  background: linear-gradient(90deg, var(--accent-soft), transparent 55%);
-}
-
-.harness-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  min-width: 0;
-}
-
-.harness-name {
-  font-weight: 650;
-  font-size: 14px;
-  letter-spacing: -.01em;
-}
-
-.harness-label {
-  font-size: 12.5px;
-  color: var(--ink-2);
-  grid-column: 1 / -1;
-}
-
-.harness-meta {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.kv {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 8px;
-  font-size: 12.5px;
-  min-width: 0;
-}
-.kv dt {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding-top: 2px;
-}
-.kv dd {
-  margin: 0;
-  min-width: 0;
-  overflow-x: auto;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.kv dd.wrap {
-  white-space: normal;
-  word-break: break-word;
-  font-family: var(--sans);
-  font-size: 12.5px;
-  color: var(--ink-2);
-}
-
-/* ── Agents ── */
-.agent-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.agent {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rule-2);
-  border-left: 3px solid var(--ok);
-  min-width: 0;
-}
-.agent:last-child { border-bottom: 0; }
-.agent.idle-long { border-left-color: var(--warn); }
-.agent.idle-gone { border-left-color: var(--ink-3); }
-
-.agent-name {
-  font-weight: 650;
-  font-family: var(--mono);
-  font-size: 13px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-idle {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-
-/* ── Message feed ── */
-.feed-wrap {
-  max-height: min(52vh, 480px);
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
-.feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.msg {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 10px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rule-2);
-  border-left: 3px solid var(--rule);
-  min-width: 0;
-}
-.msg:last-child { border-bottom: 0; }
-.msg:nth-child(even) { background: var(--sunk); }
-
-.msg-ts {
-  grid-column: 1;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  padding-top: 2px;
-  white-space: nowrap;
-}
-
-.msg-body { min-width: 0; }
-
-.msg-route {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 6px;
-  font-family: var(--mono);
-  font-size: 12px;
-  margin-bottom: 2px;
-}
-
-.msg-from { color: var(--accent); font-weight: 650; }
-.msg-arrow { color: var(--ink-3); }
-.msg-to { color: var(--ink); font-weight: 650; }
-.msg-topic {
-  color: var(--ink-3);
-  background: var(--sunk);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  padding: 0 5px;
-  font-size: 11px;
-}
-
-.msg-text {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* ── Offline / error banner ── */
-.banner {
-  display: none;
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--bad);
-  background: var(--bad-soft);
-  border-left: 5px solid var(--bad);
-  color: var(--ink);
-}
-.banner[data-show="true"] { display: block; }
-.banner h2 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 700;
-}
-.banner p {
-  margin: 0;
-  font-size: 13.5px;
-  color: var(--ink-2);
-}
-.banner code {
-  font-family: var(--mono);
-  font-size: 12px;
-  background: var(--panel);
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
-/* ── Controls ── */
-.btn {
-  appearance: none;
-  border: 1px solid var(--rule);
-  background: var(--panel);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-radius: 5px;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.btn:hover { border-color: var(--ink-3); }
-.btn:active { background: var(--sunk); }
-.btn:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-}
-.btn-accent {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.live-region {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-}
-
-/* ── Responsive ── */
-@media (max-width: 820px) {
-  .grid { grid-template-columns: 1fr; }
-  .hero { align-items: stretch; width: 100%; }
-  .masthead { flex-direction: column; }
-  h1 { font-size: 22px; }
-}
-
-@media (max-width: 420px) {
-  .wrap { padding: 14px 12px 48px; }
-  .kv { grid-template-columns: 52px 1fr; }
-  .msg { grid-template-columns: 1fr; }
-  .msg-ts { grid-column: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+*,*::before,*::after{box-sizing:border-box}
+html,body{
+  margin:0;padding:0;background:var(--paper);color:var(--ink);
+  font-family:var(--mono);font-size:13px;line-height:1.5;letter-spacing:0;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+}
+button{font-family:inherit;letter-spacing:inherit}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+a{color:var(--accent)}
+a:hover{color:var(--ink)}
+@keyframes rowin{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes flashcopy{from{background:var(--accent);color:var(--paper);border-color:var(--accent)}to{background:transparent;color:var(--ink-2);border-color:var(--rule)}}
+[data-anim="row"]{animation:rowin .16s ease-out both}
+[data-flash="1"]{animation:flashcopy .45s ease-out}
+[data-stale="true"]{opacity:.55}
+.page{max-width:1400px;margin:0 auto;padding:20px 24px 56px}
+.header{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;
+  padding-bottom:14px;border-bottom:1px solid var(--rule);
+}
+.header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.header h1 span{color:var(--ink-3);font-weight:400}
+.header .addr{font-size:11.5px;color:var(--ink-3)}
+.header .spacer{flex:1}
+.header .channel{font-size:11.5px;color:var(--ink-2)}
+.header .channel b{font-weight:700;color:var(--ink)}
+.header .live{font-size:11.5px;color:var(--ink-3)}
+.btn-refresh{
+  font-size:11px;color:var(--accent);background:transparent;
+  border:1px solid var(--accent);padding:3px 9px;cursor:pointer;
+}
+.btn-refresh:hover{background:var(--accent);color:var(--paper)}
+.btn-refresh:disabled{opacity:.55;cursor:not-allowed}
+.banner{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;
+  padding:14px 16px;margin:0 0 4px;
+}
+.banner[hidden]{display:none !important}
+.banner-ok{border-left:4px solid var(--ok)}
+.banner-warn{border-left:4px solid var(--warn)}
+.banner-degraded{border-left:4px solid var(--ink-3)}
+.banner-fail,.banner-offline{
+  display:block;border-left:4px solid var(--bad);background:var(--bad-soft);
+}
+.banner-offline{border-left-color:var(--off);background:var(--off-soft)}
+.banner .label{
+  font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+}
+.banner-ok .label{color:var(--ok)}
+.banner-warn .label{color:var(--warn)}
+.banner-degraded .label{color:var(--ink-3)}
+.banner-fail .label{
+  color:var(--paper);background:var(--bad);padding:2px 7px;display:inline-block;
+}
+.banner-offline .label{color:var(--off)}
+.banner .detail{font-size:14px;color:var(--ink)}
+.banner-fail .detail,.banner-offline .detail{font-size:15px;font-weight:500}
+.banner .sub{font-size:12px;color:var(--ink-3)}
+.banner-fail .sub-block,.banner-offline .sub-block{
+  margin:8px 0 0;font-size:12.5px;color:var(--ink-2);max-width:80ch;text-wrap:pretty;
+}
+.banner-fail .imperative{
+  margin:8px 0 0;font-size:12.5px;color:var(--ink);font-weight:500;
+}
+.banner-fail .row,.banner-offline .row{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;
+}
+.grid{
+  display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);
+  gap:0;align-items:start;margin-top:18px;
+}
+.col-left{min-width:0;border-right:1px solid var(--rule);padding-right:26px}
+.col-right{min-width:0;padding-left:26px;position:sticky;top:16px}
+.sect-head{
+  display:flex;align-items:baseline;gap:12px;padding-bottom:7px;
+}
+.sect-head.spaced{padding:26px 0 7px}
+.sect-head h2{
+  margin:0;font-size:10.5px;font-weight:700;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink-2);
+}
+.sect-head .rule{flex:1;height:1px;background:var(--rule-2);min-width:12px}
+.sect-head .summary{font-size:10.5px;color:var(--ink-3);white-space:nowrap}
+.stale-note{margin:8px 0 12px;font-size:11.5px;color:var(--ink-2)}
+.stale-note[hidden],.feed-stale[hidden]{display:none !important}
+.feed-stale{margin:6px 0 10px;font-size:11.5px;color:var(--ink-2)}
+.doctor-missing{padding:10px 0 18px;max-width:72ch}
+.doctor-missing p{
+  margin:0 0 10px;font-size:12.5px;color:var(--ink-2);text-wrap:pretty;
+}
+.ledger{
+  display:grid;grid-template-columns:44px minmax(0,25ch) minmax(0,1fr);
+  gap:2px 10px;padding:9px 12px 10px;margin-bottom:1px;align-items:baseline;
+}
+.ledger.fail{border-left:4px solid var(--bad);background:var(--bad-soft)}
+.ledger.warn{border-left:1px solid var(--warn);padding:8px 12px 9px}
+.ledger.pass{
+  gap:10px;padding:3px 12px;border-left:0;background:transparent;margin:0;
+}
+.ledger .status{font-size:11.5px}
+.ledger.fail .status{font-weight:700;color:var(--bad)}
+.ledger.warn .status{color:var(--warn)}
+.ledger.pass .status{color:var(--ok)}
+.ledger .name{font-size:13px;color:var(--ink);word-break:break-word}
+.ledger.fail .name{font-weight:700}
+.ledger.warn .name{font-weight:500}
+.ledger.pass .name{font-size:12.5px}
+.ledger .detail{font-size:12.5px;color:var(--ink-2);word-break:break-word}
+.ledger.pass .detail{font-size:12px;color:var(--ink-3)}
+.copy-btn{
+  display:block;width:100%;text-align:left;margin-top:5px;
+  font-family:var(--mono);font-size:12px;line-height:1.55;
+  color:var(--ink-2);background:transparent;border:1px solid var(--rule);
+  padding:7px 9px;cursor:copy;word-break:break-word;
+}
+.copy-btn.fix-fail{color:var(--ink);border-color:var(--bad)}
+.copy-btn.fix-offline{
+  margin-top:10px;padding:8px 10px;color:var(--ink);border-color:var(--rule);
+}
+.copy-btn.fix-degraded{margin-top:0;padding:8px 10px}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn .fix-label{
+  color:var(--ink-3);letter-spacing:.14em;text-transform:uppercase;
+  font-size:9.5px;margin-right:8px;
+}
+.ledger .copy-btn{grid-column:2/-1}
+.toggle-pass{
+  display:block;width:100%;text-align:left;margin-top:6px;padding:7px 12px;
+  font-size:11px;color:var(--ink-3);background:transparent;border:0;
+  border-top:1px solid var(--rule-2);cursor:pointer;
+}
+.toggle-pass:hover{color:var(--accent)}
+.pass-wrap{padding-bottom:6px}
+.hhead,.hrow{
+  display:grid;grid-template-columns:44px minmax(0,22ch) minmax(0,1fr) minmax(0,1.15fr);
+  gap:4px 8px;padding:10px 12px;align-items:baseline;
+}
+.hhead{
+  gap:8px;padding:0 12px 6px;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--rule-2);
+}
+.hrow{border-bottom:1px solid var(--rule-2)}
+.hrow.up:hover{background:var(--sunk)}
+.hrow.down{color:var(--ink-3)}
+.hrow .status{font-size:11.5px}
+.hrow.up .status{color:var(--ok)}
+.hrow.down .status{color:var(--ink-3)}
+.hrow .hname{font-size:13px;font-weight:700;color:var(--ink);overflow-wrap:normal}
+.hrow.down .hname{font-weight:400;color:var(--ink-2)}
+.hrow .htag{
+  display:block;font-size:10.5px;font-weight:400;color:var(--ink-3);
+  margin-top:2px;overflow-wrap:normal;
+}
+.hrow .hmodel{font-size:12.5px;color:var(--ink);word-break:break-word}
+.hrow.down .hmodel{color:var(--ink-3)}
+.hrow .hdetail{display:block;font-size:10.5px;color:var(--ink-3);margin-top:2px}
+.hrow .copy-btn{
+  margin-top:0;font-size:11.5px;padding:5px 7px;width:auto;display:block;
+}
+.hrow .not-delegable{font-size:11.5px;color:var(--ink-3)}
+.roles-line{
+  margin:10px 12px 0;font-size:11.5px;color:var(--ink-3);text-wrap:pretty;
+}
+.roles-line b{color:var(--ink-2);font-weight:700}
+.feed{
+  max-height:min(56vh,540px);overflow:auto;overscroll-behavior:contain;
+  border-top:1px solid var(--rule-2);
+}
+.msg{
+  display:grid;grid-template-columns:62px minmax(0,1fr);gap:2px 10px;
+  padding:8px 2px;border-bottom:1px solid var(--rule-2);
+}
+.msg time{font-size:10.5px;color:var(--ink-3);padding-top:2px}
+.msg .body{min-width:0}
+.msg .route{font-size:11.5px;margin-bottom:3px}
+.msg .from{color:var(--accent);font-weight:700}
+.msg .arrow{color:var(--ink-3);padding:0 4px}
+.msg .to{color:var(--ink);font-weight:700}
+.msg .topic{color:var(--ink-3);padding-left:6px}
+.msg .text{
+  margin:0;font-size:12.5px;line-height:1.5;color:var(--ink);
+  word-break:break-word;text-wrap:pretty;white-space:pre-wrap;
+}
+.feed-foot{
+  margin:0;padding:9px 2px;font-size:11.5px;color:var(--ink-3);text-wrap:pretty;
+}
+.agent{
+  display:grid;grid-template-columns:minmax(0,1fr) 88px;gap:10px;
+  align-items:baseline;padding:6px 2px;border-bottom:1px solid var(--rule-2);
+}
+.agent .aname{
+  font-size:12.5px;font-weight:700;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.agent.idle .aname{font-weight:400;color:var(--ink-2)}
+.agent .aidle{font-size:11.5px;color:var(--ink-2);text-align:right}
+.agent.idle .aidle{color:var(--ink-3)}
+.quiet-label{
+  margin:12px 0 4px;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ink-3);
+}
+.no-agents{
+  margin:6px 0 0;font-size:12px;color:var(--ink-3);max-width:52ch;text-wrap:pretty;
+}
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+@media (max-width:940px){
+  .grid{grid-template-columns:minmax(0,1fr)}
+  .col-left{border-right:0;padding-right:0}
+  .col-right{position:static;padding-left:0;border-top:1px solid var(--rule);padding-top:22px}
+  .ledger{grid-template-columns:44px minmax(0,1fr)}
+  .ledger .detail{grid-column:2}
+  .ledger .copy-btn{grid-column:2/-1}
+}
+@media (max-width:560px){
+  .page{padding:14px 12px 40px}
+  .hhead,.hrow{grid-template-columns:40px minmax(0,1fr)}
+  .hhead span:nth-child(n+3),
+  .hrow > .hmodel,
+  .hrow > .copy-btn,
+  .hrow > .not-delegable{grid-column:2}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
   }
 }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="masthead">
-      <div class="brand">
-        <p class="eyebrow">Claude Code · orchestrator</p>
-        <h1>Control plane</h1>
-        <p class="subtitle">Setup health and live agent traffic on this session bus.</p>
-      </div>
-      <div class="hero">
-        <div class="readiness" id="readiness" data-state="unknown" role="status" aria-live="polite">
-          <div class="readiness-icon" id="readiness-icon" aria-hidden="true">·</div>
-          <div class="readiness-copy">
-            <p class="readiness-label" id="readiness-label">Connecting</p>
-            <p class="readiness-detail" id="readiness-detail">Fetching status from the local bus…</p>
-          </div>
-        </div>
-        <button type="button" class="btn btn-accent" id="btn-refresh">Refresh now</button>
-      </div>
+  <div class="page">
+    <header class="header">
+      <h1>orchestrator<span>/control-plane</span></h1>
+      <span class="addr">127.0.0.1:8477</span>
+      <span class="spacer"></span>
+      <span class="channel">channel <b id="channel-name">—</b></span>
+      <span class="live" id="live-label">connecting…</span>
+      <button type="button" class="btn-refresh" id="btn-refresh">refresh now</button>
     </header>
 
-    <div class="banner" id="offline-banner" data-show="false" role="alert">
-      <h2>Bus unreachable</h2>
-      <p>Could not reach <code>http://127.0.0.1:8477</code>. Start the agent bus (SessionStart hook, or <code>agent-bus serve</code>) and this page will recover on the next poll.</p>
+    <div id="banners" aria-live="polite">
+      <section class="banner banner-ok" id="banner-ok" hidden>
+        <span class="label">ready</span>
+        <span class="detail" id="banner-ok-detail"></span>
+        <span class="sub" id="banner-ok-sub"></span>
+      </section>
+      <section class="banner banner-warn" id="banner-warn" hidden>
+        <span class="label">ready</span>
+        <span class="detail" id="banner-warn-detail"></span>
+        <span class="sub" id="banner-warn-sub"></span>
+      </section>
+      <section class="banner banner-degraded" id="banner-degraded" hidden>
+        <span class="label">unverified</span>
+        <span class="detail" id="banner-degraded-detail"></span>
+        <span class="sub" id="banner-degraded-sub"></span>
+      </section>
+      <section class="banner banner-fail" id="banner-fail" hidden role="alert">
+        <div class="row">
+          <span class="label">not ready</span>
+          <span class="detail" id="banner-fail-detail"></span>
+        </div>
+        <p class="sub-block" id="banner-fail-sub"></p>
+        <p class="imperative" id="banner-fail-imperative"></p>
+      </section>
+      <section class="banner banner-offline" id="banner-offline" hidden role="alert">
+        <div class="row">
+          <span class="label">no connection</span>
+          <span class="detail" id="banner-offline-detail"></span>
+        </div>
+        <p class="sub-block" id="banner-offline-sub"></p>
+        <button type="button" class="copy-btn fix-offline" id="banner-offline-fix" title="Click to copy" data-copy="agent-bus serve   # or start a new session; SessionStart launches the bus">
+          <span class="fix-label">fix</span><span class="copy-text">agent-bus serve   # or start a new session; SessionStart launches the bus</span>
+        </button>
+      </section>
     </div>
 
-    <div class="meta-row" id="meta-row" aria-label="Session metadata"></div>
-
     <div class="grid">
-      <div class="stack">
-        <section class="panel" aria-labelledby="checks-title">
-          <div class="panel-head">
-            <h2 id="checks-title">Doctor checks</h2>
-            <span class="panel-count" id="checks-count"></span>
-          </div>
-          <div class="panel-body" id="checks-body">
-            <div class="empty-state">Loading checks…</div>
-          </div>
-        </section>
+      <div class="col-left">
+        <div class="sect-head">
+          <h2>doctor</h2>
+          <span class="rule" aria-hidden="true"></span>
+          <span class="summary" id="checks-summary">—</span>
+        </div>
 
-        <section class="panel" aria-labelledby="feed-title">
-          <div class="panel-head">
-            <h2 id="feed-title">Message feed</h2>
-            <span class="panel-count" id="feed-count">0 messages</span>
+        <div class="doctor-missing" id="doctor-missing" hidden>
+          <p>orchestrator-doctor is not on the path, so no check has run. Harnesses, agents and the bus below are reported by the server directly and are unaffected.</p>
+          <button type="button" class="copy-btn fix-degraded" id="degraded-fix" title="Click to copy" data-copy="restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin">
+            <span class="fix-label">fix</span><span class="copy-text">restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin</span>
+          </button>
+        </div>
+
+        <p class="stale-note" id="doctor-stale" hidden>last result received — nothing has been re-checked since</p>
+
+        <div id="doctor-body" data-stale="false">
+          <div id="fails"></div>
+          <div id="warns"></div>
+          <button type="button" class="toggle-pass" id="toggle-pass" hidden></button>
+          <div class="pass-wrap" id="passes" hidden></div>
+        </div>
+
+        <div class="sect-head spaced">
+          <h2>harnesses</h2>
+          <span class="rule" aria-hidden="true"></span>
+          <span class="summary" id="harness-summary">—</span>
+        </div>
+
+        <div id="harness-body" data-stale="false">
+          <div class="hhead" aria-hidden="true">
+            <span></span><span>harness</span><span>model</span><span>delegate</span>
           </div>
-          <div class="panel-body">
-            <div class="feed-wrap" id="feed-wrap" tabindex="0" aria-label="Live message feed">
-              <ol class="feed" id="feed"></ol>
-              <div class="empty-state" id="feed-empty">No messages on this channel yet.</div>
-            </div>
-          </div>
-        </section>
+          <div id="harnesses-up"></div>
+          <div id="harnesses-down"></div>
+          <p class="roles-line" id="roles-line">roles <b>—</b> — the same role definition runs on any available harness; substitute it for &lt;role&gt;</p>
+        </div>
       </div>
 
-      <div class="stack">
-        <section class="panel" aria-labelledby="harness-title">
-          <div class="panel-head">
-            <h2 id="harness-title">Harnesses</h2>
-            <span class="panel-count" id="harness-count"></span>
-          </div>
-          <div class="panel-body" id="harness-body">
-            <div class="empty-state">Loading harnesses…</div>
-          </div>
-        </section>
+      <div class="col-right">
+        <div class="sect-head">
+          <h2>feed</h2>
+          <span class="rule" aria-hidden="true"></span>
+          <span class="summary" id="feed-count">0 messages</span>
+        </div>
 
-        <section class="panel" aria-labelledby="agents-title">
-          <div class="panel-head">
-            <h2 id="agents-title">Registered agents</h2>
-            <span class="panel-count" id="agents-count"></span>
-          </div>
-          <div class="panel-body" id="agents-body">
-            <div class="empty-state">Loading agents…</div>
-          </div>
-        </section>
+        <p class="feed-stale" id="feed-stale" hidden>stale — nothing received</p>
+
+        <div class="feed" id="feed" tabindex="0" aria-label="Live message feed" aria-live="polite" aria-relevant="additions">
+          <div id="messages"></div>
+          <p class="feed-foot" id="feed-foot">polling /read every 3s — new messages append here</p>
+        </div>
+
+        <div class="sect-head spaced">
+          <h2>agents</h2>
+          <span class="rule" aria-hidden="true"></span>
+          <span class="summary" id="agent-count">0 registered</span>
+        </div>
+
+        <div id="agents-body" data-stale="false">
+          <div id="agents-fresh"></div>
+          <p class="quiet-label" id="agents-quiet" hidden>quiet over a minute</p>
+          <div id="agents-idle"></div>
+          <p class="no-agents" id="no-agents" hidden>Nobody registered. An agent appears here the moment it calls register on the bus.</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="live-region" id="live" aria-live="polite" aria-atomic="true"></div>
+  <div class="sr-only" id="announce" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 (function () {
@@ -805,383 +387,642 @@ h1 {
   var BASE = "http://127.0.0.1:8477";
   var POLL_MS = 3000;
   var STATUS_MS = 10000;
+  var DEGRADED_FIX = "restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin";
+  var OFFLINE_FIX = "agent-bus serve   # or start a new session; SessionStart launches the bus";
 
   var state = {
     online: null,
+    doctorLoaded: false,
     cursor: 0,
-    seenIds: Object.create(null),
     messageCount: 0,
-    lastStatusAt: 0,
+    lastOkAt: 0,
+    lastStatus: null,
     pollTimer: null,
     statusTimer: null,
-    status: null
+    ageTimer: null,
+    showPassing: false,
+    seen: Object.create(null)
   };
 
   var el = {
-    readiness: document.getElementById("readiness"),
-    readinessIcon: document.getElementById("readiness-icon"),
-    readinessLabel: document.getElementById("readiness-label"),
-    readinessDetail: document.getElementById("readiness-detail"),
-    offlineBanner: document.getElementById("offline-banner"),
-    metaRow: document.getElementById("meta-row"),
-    checksBody: document.getElementById("checks-body"),
-    checksCount: document.getElementById("checks-count"),
+    channelName: document.getElementById("channel-name"),
+    liveLabel: document.getElementById("live-label"),
+    btnRefresh: document.getElementById("btn-refresh"),
+    bannerOk: document.getElementById("banner-ok"),
+    bannerOkDetail: document.getElementById("banner-ok-detail"),
+    bannerOkSub: document.getElementById("banner-ok-sub"),
+    bannerWarn: document.getElementById("banner-warn"),
+    bannerWarnDetail: document.getElementById("banner-warn-detail"),
+    bannerWarnSub: document.getElementById("banner-warn-sub"),
+    bannerDegraded: document.getElementById("banner-degraded"),
+    bannerDegradedDetail: document.getElementById("banner-degraded-detail"),
+    bannerDegradedSub: document.getElementById("banner-degraded-sub"),
+    bannerFail: document.getElementById("banner-fail"),
+    bannerFailDetail: document.getElementById("banner-fail-detail"),
+    bannerFailSub: document.getElementById("banner-fail-sub"),
+    bannerFailImperative: document.getElementById("banner-fail-imperative"),
+    bannerOffline: document.getElementById("banner-offline"),
+    bannerOfflineDetail: document.getElementById("banner-offline-detail"),
+    bannerOfflineSub: document.getElementById("banner-offline-sub"),
+    bannerOfflineFix: document.getElementById("banner-offline-fix"),
+    checksSummary: document.getElementById("checks-summary"),
+    doctorMissing: document.getElementById("doctor-missing"),
+    doctorStale: document.getElementById("doctor-stale"),
+    doctorBody: document.getElementById("doctor-body"),
+    fails: document.getElementById("fails"),
+    warns: document.getElementById("warns"),
+    togglePass: document.getElementById("toggle-pass"),
+    passes: document.getElementById("passes"),
+    harnessSummary: document.getElementById("harness-summary"),
     harnessBody: document.getElementById("harness-body"),
-    harnessCount: document.getElementById("harness-count"),
-    agentsBody: document.getElementById("agents-body"),
-    agentsCount: document.getElementById("agents-count"),
-    feed: document.getElementById("feed"),
+    harnessesUp: document.getElementById("harnesses-up"),
+    harnessesDown: document.getElementById("harnesses-down"),
+    rolesLine: document.getElementById("roles-line"),
     feedCount: document.getElementById("feed-count"),
-    feedEmpty: document.getElementById("feed-empty"),
-    feedWrap: document.getElementById("feed-wrap"),
-    live: document.getElementById("live"),
-    btnRefresh: document.getElementById("btn-refresh")
+    feedStale: document.getElementById("feed-stale"),
+    feed: document.getElementById("feed"),
+    messages: document.getElementById("messages"),
+    feedFoot: document.getElementById("feed-foot"),
+    agentCount: document.getElementById("agent-count"),
+    agentsBody: document.getElementById("agents-body"),
+    agentsFresh: document.getElementById("agents-fresh"),
+    agentsQuiet: document.getElementById("agents-quiet"),
+    agentsIdle: document.getElementById("agents-idle"),
+    noAgents: document.getElementById("no-agents"),
+    announce: document.getElementById("announce")
   };
 
-  function esc(s) {
-    return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  function fmtIdle(sec) {
+    sec = Math.max(0, Math.floor(Number(sec) || 0));
+    if (sec < 60) return "idle " + sec + "s";
+    var m = Math.floor(sec / 60);
+    var r = sec % 60;
+    return "idle " + m + "m " + pad2(r) + "s";
   }
 
-  function formatIdle(sec) {
-    if (sec == null || isNaN(sec)) return "—";
-    sec = Math.max(0, Number(sec));
-    if (sec < 1) return "<1s";
-    if (sec < 60) return Math.round(sec) + "s";
-    if (sec < 3600) {
-      var m = Math.floor(sec / 60);
-      var s = Math.round(sec % 60);
-      return m + "m " + s + "s";
-    }
-    var h = Math.floor(sec / 3600);
-    var rm = Math.floor((sec % 3600) / 60);
-    return h + "h " + rm + "m";
-  }
-
-  function formatTs(ts) {
+  function fmtTs(ts) {
     if (!ts) return "—";
-    // Prefer local short time from ISO-ish string
     var d = new Date(ts);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
     }
-    // Fallback: strip date if "YYYY-MM-DDTHH:MM:SS"
     var m = String(ts).match(/T(\d{2}:\d{2}:\d{2})/);
     return m ? m[1] : String(ts);
   }
 
+  function ageLabel() {
+    if (!state.lastOkAt) return "connecting…";
+    var s = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+    if (state.online === false) return "no response for " + s + "s";
+    return "updated " + s + "s ago";
+  }
+
   function announce(msg) {
-    el.live.textContent = msg;
+    el.announce.textContent = msg;
   }
 
-  function setOffline(isOffline, errDetail) {
-    state.online = !isOffline;
-    el.offlineBanner.setAttribute("data-show", isOffline ? "true" : "false");
-    if (isOffline) {
-      setReadiness("offline", "Offline", errDetail || "Local bus at 127.0.0.1:8477 did not respond.");
-      renderMeta(null, true);
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function text(tag, className, value) {
+    var n = document.createElement(tag);
+    if (className) n.className = className;
+    n.textContent = value == null ? "" : String(value);
+    return n;
+  }
+
+  function copyButton(cmd, extraClass) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "copy-btn" + (extraClass ? " " + extraClass : "");
+    btn.title = "Click to copy";
+    btn.setAttribute("data-copy", cmd);
+    var label = document.createElement("span");
+    label.className = "fix-label";
+    label.textContent = "fix";
+    var body = document.createElement("span");
+    body.className = "copy-text";
+    body.textContent = cmd;
+    btn.appendChild(label);
+    btn.appendChild(body);
+    return btn;
+  }
+
+  function flashCopy(btn) {
+    btn.setAttribute("data-flash", "1");
+    setTimeout(function () { btn.removeAttribute("data-flash"); }, 460);
+  }
+
+  function doCopy(btn) {
+    var textToCopy = btn.getAttribute("data-copy") || "";
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textToCopy).then(function () {
+        flashCopy(btn);
+      }, function () {
+        flashCopy(btn);
+      });
+    } else {
+      try {
+        var ta = document.createElement("textarea");
+        ta.value = textToCopy;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch (e) { /* ignore */ }
+      flashCopy(btn);
     }
   }
 
-  function setReadiness(stateKey, label, detail) {
-    el.readiness.setAttribute("data-state", stateKey);
-    el.readinessLabel.textContent = label;
-    el.readinessDetail.textContent = detail;
-    var icons = { ready: "✓", warn: "!", fail: "×", offline: "○", unknown: "·" };
-    el.readinessIcon.textContent = icons[stateKey] || "·";
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-copy]");
+    if (!btn) return;
+    e.preventDefault();
+    doCopy(btn);
+  });
+
+  function hideAllBanners() {
+    el.bannerOk.hidden = true;
+    el.bannerWarn.hidden = true;
+    el.bannerDegraded.hidden = true;
+    el.bannerFail.hidden = true;
+    el.bannerOffline.hidden = true;
   }
 
-  function deriveReadiness(data) {
-    if (!data || data.ok === false) {
-      return {
-        state: "fail",
-        label: "Unhealthy",
-        detail: (data && data.error) ? String(data.error) : "Status endpoint returned an error."
-      };
-    }
-
-    var doctor = data.doctor;
-    if (doctor == null) {
-      return {
-        state: "warn",
-        label: "Doctor unavailable",
-        detail: "Status loaded, but orchestrator-doctor is not installed or failed to run. Harnesses and agents still shown."
-      };
-    }
-
-    var checks = Array.isArray(doctor.checks) ? doctor.checks : [];
-    var requiredFails = checks.filter(function (c) {
+  function deriveState(data, offline) {
+    if (offline) return "offline";
+    if (!data) return "connecting";
+    if (!state.doctorLoaded) return "connecting";
+    if (data.doctor == null) return "degraded";
+    var checks = Array.isArray(data.doctor.checks) ? data.doctor.checks : [];
+    var requiredFail = checks.some(function (c) {
       return c && c.required && c.status === "fail";
     });
-    var optionalFails = checks.filter(function (c) {
-      return c && !c.required && c.status === "fail";
+    if (requiredFail) return "broken";
+    var hasWarn = checks.some(function (c) {
+      return c && (c.status === "warn" || (c.status === "fail" && !c.required));
     });
+    if (hasWarn) return "gaps";
+    return "healthy";
+  }
+
+  function harnessTag(name, h, defName) {
+    var isDefault = name === defName;
+    var detail = h.detail || "";
+    if (isDefault) {
+      return "default · " + (detail || "built-in");
+    }
+    if (h.plugin) {
+      var p = String(h.plugin);
+      // "/codex:* (openai/codex-plugin-cc, installed)" → short tag
+      var m = p.match(/\(([^,)]+)/);
+      if (m) return m[1].trim();
+      return p.replace(/^\/+/, "").split(/\s+/)[0];
+    }
+    if (h.label) {
+      var lab = String(h.label);
+      var dash = lab.indexOf(" — ");
+      if (dash > 0) return lab.slice(0, dash);
+      return lab;
+    }
+    return detail || "";
+  }
+
+  function setStale(flag) {
+    var v = flag ? "true" : "false";
+    el.doctorBody.setAttribute("data-stale", v);
+    el.harnessBody.setAttribute("data-stale", v);
+    el.agentsBody.setAttribute("data-stale", v);
+    el.doctorStale.hidden = !flag;
+    el.feedStale.hidden = !flag;
+    if (flag) {
+      var s = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+      el.doctorStale.textContent = "last result received " + s + "s ago — nothing has been re-checked since";
+      el.feedStale.textContent = "stale — nothing received for " + s + "s";
+    }
+  }
+
+  function renderBanner(st, data) {
+    hideAllBanners();
+    var checks = data && data.doctor && Array.isArray(data.doctor.checks) ? data.doctor.checks : [];
+    var fails = checks.filter(function (c) { return c && c.status === "fail" && c.required; });
     var warns = checks.filter(function (c) {
-      return c && c.status === "warn";
+      return c && (c.status === "warn" || (c.status === "fail" && !c.required));
     });
+    var passes = checks.filter(function (c) { return c && c.status === "ok"; });
+    var usable = (data && data.doctor && data.doctor.usableHarnesses) || [];
+    var usableLine = usable.length ? usable.join(", ") : "none";
 
-    if (doctor.ok === false || requiredFails.length) {
-      var names = requiredFails.map(function (c) { return c.name; }).filter(Boolean);
-      return {
-        state: "fail",
-        label: "Not ready",
-        detail: names.length
-          ? ("Required check" + (names.length > 1 ? "s" : "") + " failing: " + names.join(", ") + ".")
-          : "Doctor reports not ready."
-      };
+    if (st === "offline") {
+      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+      el.bannerOffline.hidden = false;
+      el.bannerOfflineDetail.textContent = "The bus at 127.0.0.1:8477 stopped answering.";
+      el.bannerOfflineSub.textContent =
+        "Everything below is the last response received, " + age +
+        " seconds ago. The page recovers on the next poll — no reload needed.";
+      el.bannerOfflineFix.setAttribute("data-copy", OFFLINE_FIX);
+      el.bannerOfflineFix.querySelector(".copy-text").textContent = OFFLINE_FIX;
+      return;
     }
 
-    if (optionalFails.length || warns.length) {
-      var bits = [];
-      if (warns.length) bits.push(warns.length + " warning" + (warns.length > 1 ? "s" : ""));
-      if (optionalFails.length) bits.push(optionalFails.length + " optional fail" + (optionalFails.length > 1 ? "s" : ""));
-      return {
-        state: "warn",
-        label: "Ready with warnings",
-        detail: bits.join(" · ") + ". Usable harnesses: " + ((doctor.usableHarnesses || []).join(", ") || "none listed") + "."
-      };
+    if (st === "connecting") {
+      el.bannerDegraded.hidden = false;
+      el.bannerDegradedDetail.textContent = "Loading status…";
+      el.bannerDegradedSub.textContent = "Fetching the local bus.";
+      return;
     }
 
-    var usable = (doctor.usableHarnesses || []).join(", ") || "none";
-    return {
-      state: "ready",
-      label: "Ready",
-      detail: "All required checks pass. Usable harnesses: " + usable + "."
-    };
+    if (st === "degraded") {
+      el.bannerDegraded.hidden = false;
+      el.bannerDegradedDetail.textContent = "Health unknown — doctor not installed.";
+      el.bannerDegradedSub.textContent =
+        "The bus, harnesses and agents are reported directly by the server and are live. Nothing has been verified.";
+      return;
+    }
+
+    if (st === "broken") {
+      var first = fails[0];
+      el.bannerFail.hidden = false;
+      el.bannerFailDetail.textContent = first
+        ? (first.name + " is failing — delegation will not work.")
+        : "A required check is failing — delegation will not work.";
+      el.bannerFailSub.textContent = first && first.detail
+        ? first.detail
+        : "Until required tooling is linked, a delegated wave fails at launch instead of reporting an error.";
+      el.bannerFailImperative.textContent = first && first.fix
+        ? "Fix it with the command on the failing check below."
+        : "Restart the session to link ~/.claude/bin — the full command is on the failing check below.";
+      return;
+    }
+
+    if (st === "gaps") {
+      el.bannerWarn.hidden = false;
+      el.bannerWarnDetail.textContent =
+        "All required checks pass — " + warns.length + " optional gap" +
+        (warns.length === 1 ? "" : "s") + ".";
+      el.bannerWarnSub.textContent =
+        "Delegation works on " + usableLine + ". Each gap below is one command.";
+      return;
+    }
+
+    // healthy
+    el.bannerOk.hidden = false;
+    el.bannerOkDetail.textContent =
+      "All " + passes.length + " checks pass.";
+    el.bannerOkSub.textContent =
+      usable.length
+        ? (usableLine + " all delegable.")
+        : "No usable harnesses listed.";
   }
 
-  function renderMeta(data, offline) {
-    var chips = [];
-    if (offline) {
-      chips.push('<span class="meta-chip" data-live="false"><span class="dot" aria-hidden="true"></span>Bus offline</span>');
-    } else if (data) {
-      chips.push('<span class="meta-chip" data-live="true"><span class="dot" aria-hidden="true"></span>Live</span>');
-      if (data.session != null) chips.push('<span class="meta-chip">session <strong>' + esc(data.session) + '</strong></span>');
-      if (data.channel != null) chips.push('<span class="meta-chip">channel <strong>' + esc(data.channel) + '</strong></span>');
-      if (data.default != null) chips.push('<span class="meta-chip">default <strong>' + esc(data.default) + '</strong></span>');
-      if (Array.isArray(data.roles) && data.roles.length) {
-        chips.push('<span class="meta-chip">roles <strong>' + esc(data.roles.join(", ")) + '</strong></span>');
+  function renderDoctor(data, st) {
+    var offline = st === "offline";
+    var doctor = data && data.doctor;
+
+    if (st === "connecting" && !state.doctorLoaded) {
+      el.doctorMissing.hidden = true;
+      el.checksSummary.textContent = "…";
+      clear(el.fails);
+      clear(el.warns);
+      clear(el.passes);
+      el.togglePass.hidden = true;
+      el.passes.hidden = true;
+      return;
+    }
+
+    if (!doctor) {
+      // Degraded: server answered without doctor. Offline-with-no-history: keep quiet —
+      // the offline banner already explains the failure.
+      el.doctorMissing.hidden = st !== "degraded";
+      if (offline) {
+        var age0 = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+        el.checksSummary.textContent = "last known · " + age0 + "s ago";
+      } else {
+        el.checksSummary.textContent = "not run";
       }
-      chips.push('<span class="meta-chip">messages <strong>' + esc(String(data.messageCount != null ? data.messageCount : state.messageCount)) + '</strong></span>');
-      chips.push('<span class="meta-chip">cursor <strong>' + esc(String(state.cursor)) + '</strong></span>');
-    }
-    var now = new Date();
-    chips.push('<span class="meta-chip">updated <strong>' + esc(now.toLocaleTimeString()) + '</strong></span>');
-    el.metaRow.innerHTML = chips.join("");
-  }
-
-  function statusRank(s) {
-    if (s === "fail") return 0;
-    if (s === "warn") return 1;
-    if (s === "ok") return 2;
-    return 3;
-  }
-
-  function renderChecks(doctor) {
-    if (doctor == null) {
-      el.checksCount.textContent = "unavailable";
-      el.checksBody.innerHTML =
-        '<div class="empty-state">' +
-        'Doctor data is null. Install and link <code>orchestrator-doctor</code> ' +
-        '(SessionStart hook puts it on <code>~/.claude/bin</code>), then refresh.' +
-        '</div>';
+      clear(el.fails);
+      clear(el.warns);
+      clear(el.passes);
+      el.togglePass.hidden = true;
+      el.passes.hidden = true;
       return;
     }
 
-    var checks = Array.isArray(doctor.checks) ? doctor.checks.slice() : [];
-    var counts = { fail: 0, warn: 0, ok: 0, other: 0 };
-    checks.forEach(function (c) {
-      if (!c) return;
-      if (c.status === "fail") counts.fail++;
-      else if (c.status === "warn") counts.warn++;
-      else if (c.status === "ok") counts.ok++;
-      else counts.other++;
-    });
+    el.doctorMissing.hidden = true;
+    var checks = Array.isArray(doctor.checks) ? doctor.checks : [];
+    var fails = checks.filter(function (c) { return c && c.status === "fail"; });
+    var warns = checks.filter(function (c) { return c && c.status === "warn"; });
+    var passes = checks.filter(function (c) { return c && c.status === "ok"; });
 
-    el.checksCount.textContent =
-      counts.fail + " fail · " + counts.warn + " warn · " + counts.ok + " ok";
-
-    if (!checks.length) {
-      el.checksBody.innerHTML = '<div class="empty-state">Doctor returned no checks.</div>';
-      return;
+    if (offline) {
+      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+      el.checksSummary.textContent = "last known · " + age + "s ago";
+    } else {
+      el.checksSummary.textContent =
+        fails.length + " fail · " + warns.length + " warn · " + passes.length + " ok";
     }
 
-    // Group order: required fails, optional fails, warns, oks, unknown
-    var groups = [
-      { key: "required-fail", title: "Required failures", filter: function (c) { return c.status === "fail" && c.required; } },
-      { key: "optional-fail", title: "Optional failures", filter: function (c) { return c.status === "fail" && !c.required; } },
-      { key: "warn", title: "Warnings", filter: function (c) { return c.status === "warn"; } },
-      { key: "ok", title: "Passing", filter: function (c) { return c.status === "ok"; } },
-      { key: "other", title: "Other", filter: function (c) { return c.status !== "fail" && c.status !== "warn" && c.status !== "ok"; } }
-    ];
-
-    var html = "";
-    groups.forEach(function (g) {
-      var items = checks.filter(g.filter);
-      if (!items.length) return;
-      html += '<div class="check-group" data-group="' + esc(g.key) + '">';
-      html += '<div class="check-group-head">' + esc(g.title) + ' · ' + items.length + '</div>';
-      html += '<ul class="check-list">';
-      items.forEach(function (c) {
-        var st = c.status || "unknown";
-        var req = !!c.required;
-        var chipClass = st === "fail" ? "fail" : st === "warn" ? "warn" : st === "ok" ? "ok" : "neutral";
-        var classes = "check-item " + chipClass + (req ? " required" : "");
-        html += '<li class="' + classes + '">';
-        html += '<span class="chip ' + chipClass + (req && st !== "ok" ? " required" : "") + '">';
-        html += esc(st);
-        if (req) html += " · req";
-        html += "</span>";
-        html += '<div class="check-main">';
-        html += '<span class="check-name">' + esc(c.name || "(unnamed)") + "</span>";
-        if (c.detail) html += '<span class="check-detail">' + esc(c.detail) + "</span>";
-        html += "</div>";
-        if (c.fix && st !== "ok") {
-          html += '<div class="check-fix">' + esc(c.fix) + "</div>";
-        }
-        html += "</li>";
-      });
-      html += "</ul></div>";
+    clear(el.fails);
+    fails.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ledger fail";
+      row.setAttribute("data-anim", "row");
+      row.appendChild(text("span", "status", "fail"));
+      row.appendChild(text("span", "name", c.name || "(unnamed)"));
+      row.appendChild(text("span", "detail", c.detail || ""));
+      if (c.fix) row.appendChild(copyButton(String(c.fix), "fix-fail"));
+      el.fails.appendChild(row);
     });
 
-    el.checksBody.innerHTML = html || '<div class="empty-state">No checks to show.</div>';
+    clear(el.warns);
+    warns.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ledger warn";
+      row.setAttribute("data-anim", "row");
+      row.appendChild(text("span", "status", "warn"));
+      row.appendChild(text("span", "name", c.name || "(unnamed)"));
+      row.appendChild(text("span", "detail", c.detail || ""));
+      if (c.fix) row.appendChild(copyButton(String(c.fix), ""));
+      el.warns.appendChild(row);
+    });
+
+    clear(el.passes);
+    passes.forEach(function (c) {
+      var row = document.createElement("div");
+      row.className = "ledger pass";
+      row.appendChild(text("span", "status", "ok"));
+      row.appendChild(text("span", "name", c.name || "(unnamed)"));
+      row.appendChild(text("span", "detail", c.detail || ""));
+      el.passes.appendChild(row);
+    });
+
+    if (passes.length) {
+      el.togglePass.hidden = false;
+      el.togglePass.textContent =
+        (state.showPassing ? "hide the " : "show the ") +
+        passes.length + " passing checks";
+      el.passes.hidden = !state.showPassing;
+    } else {
+      el.togglePass.hidden = true;
+      el.passes.hidden = true;
+    }
   }
 
-  function renderHarnesses(data) {
+  function renderHarnesses(data, st) {
     var harnesses = (data && data.harnesses) || {};
     var names = Object.keys(harnesses);
     var def = data && data.default;
-    var avail = 0;
-    names.forEach(function (n) {
-      if (harnesses[n] && harnesses[n].available) avail++;
-    });
+    var up = [];
+    var down = [];
 
-    el.harnessCount.textContent = avail + " / " + names.length + " available";
-
-    if (!names.length) {
-      el.harnessBody.innerHTML = '<div class="empty-state">No harnesses registered.</div>';
-      return;
-    }
-
-    // Available first, default first among them
-    names.sort(function (a, b) {
-      var ha = harnesses[a] || {};
-      var hb = harnesses[b] || {};
-      if (!!hb.available - !!ha.available) return (!!hb.available) - (!!ha.available);
-      if (a === def) return -1;
-      if (b === def) return 1;
-      return a.localeCompare(b);
-    });
-
-    var html = '<ul class="harness-list">';
     names.forEach(function (name) {
       var h = harnesses[name] || {};
-      var available = !!h.available;
-      var isDefault = name === def;
-      var classes = "harness " + (available ? "available" : "unavailable") + (isDefault ? " default" : "");
-      html += '<li class="' + classes + '">';
-      html += '<div class="harness-top">';
-      html += '<span class="harness-name">' + esc(name) + "</span>";
-      html += '<span class="chip ' + (available ? "ok" : "neutral") + '">' + (available ? "available" : "unavailable") + "</span>";
-      if (isDefault) html += '<span class="chip neutral">default</span>';
-      html += "</div>";
-      if (h.label) html += '<div class="harness-label">' + esc(h.label) + "</div>";
-      html += '<div class="harness-meta">';
-      html += '<div class="kv"><dt>Model</dt><dd class="wrap">' + esc(h.model != null && h.model !== "" ? h.model : "—") + "</dd></div>";
-      html += '<div class="kv"><dt>Runner</dt><dd>' + esc(h.runner || "—") + "</dd></div>";
-      if (h.detail) html += '<div class="kv"><dt>Detail</dt><dd class="wrap">' + esc(h.detail) + "</dd></div>";
-      if (h.plugin) html += '<div class="kv"><dt>Plugin</dt><dd class="wrap">' + esc(h.plugin) + "</dd></div>";
-      if (h.notes) html += '<div class="kv"><dt>Notes</dt><dd class="wrap">' + esc(h.notes) + "</dd></div>";
-      html += "</div></li>";
+      var item = {
+        name: name,
+        available: !!h.available,
+        model: h.model != null && h.model !== "" ? String(h.model) : "—",
+        detail: h.detail || h.notes || "",
+        tag: harnessTag(name, h, def),
+        delegate: h.runner || ("run-role <role> --harness " + name)
+      };
+      if (item.available) up.push(item);
+      else down.push(item);
     });
-    html += "</ul>";
-    el.harnessBody.innerHTML = html;
+
+    // default first among up
+    up.sort(function (a, b) {
+      if (a.name === def) return -1;
+      if (b.name === def) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    down.sort(function (a, b) { return a.name.localeCompare(b.name); });
+
+    if (st === "offline") {
+      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+      el.harnessSummary.textContent = "last known · " + age + "s ago";
+    } else {
+      el.harnessSummary.textContent =
+        up.length + " of " + names.length + " delegable";
+    }
+
+    clear(el.harnessesUp);
+    up.forEach(function (h) {
+      var row = document.createElement("div");
+      row.className = "hrow up";
+      row.appendChild(text("span", "status", "ok"));
+
+      var nameCell = document.createElement("span");
+      nameCell.className = "hname";
+      nameCell.appendChild(document.createTextNode(h.name));
+      if (h.tag) {
+        var tag = document.createElement("span");
+        tag.className = "htag";
+        tag.textContent = h.tag;
+        nameCell.appendChild(tag);
+      }
+      row.appendChild(nameCell);
+
+      var modelCell = document.createElement("span");
+      modelCell.className = "hmodel";
+      modelCell.appendChild(document.createTextNode(h.model));
+      if (h.detail) {
+        var det = document.createElement("span");
+        det.className = "hdetail";
+        det.textContent = h.detail;
+        modelCell.appendChild(det);
+      }
+      row.appendChild(modelCell);
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "copy-btn";
+      btn.title = "Click to copy";
+      btn.setAttribute("data-copy", h.delegate);
+      btn.textContent = h.delegate;
+      row.appendChild(btn);
+
+      el.harnessesUp.appendChild(row);
+    });
+
+    clear(el.harnessesDown);
+    down.forEach(function (h) {
+      var row = document.createElement("div");
+      row.className = "hrow down";
+      row.appendChild(text("span", "status", "off"));
+
+      var nameCell = document.createElement("span");
+      nameCell.className = "hname";
+      nameCell.appendChild(document.createTextNode(h.name));
+      if (h.tag) {
+        var tag = document.createElement("span");
+        tag.className = "htag";
+        tag.textContent = h.tag;
+        nameCell.appendChild(tag);
+      }
+      row.appendChild(nameCell);
+
+      var modelCell = document.createElement("span");
+      modelCell.className = "hmodel";
+      modelCell.appendChild(document.createTextNode("—"));
+      if (h.detail) {
+        var det = document.createElement("span");
+        det.className = "hdetail";
+        det.textContent = h.detail;
+        modelCell.appendChild(det);
+      }
+      row.appendChild(modelCell);
+
+      row.appendChild(text("span", "not-delegable", "not delegable"));
+      el.harnessesDown.appendChild(row);
+    });
+
+    var roles = (data && Array.isArray(data.roles) ? data.roles : []);
+    var rolesText = roles.length ? roles.join(" · ") : "—";
+    clear(el.rolesLine);
+    el.rolesLine.appendChild(document.createTextNode("roles "));
+    var b = document.createElement("b");
+    b.textContent = rolesText;
+    el.rolesLine.appendChild(b);
+    el.rolesLine.appendChild(
+      document.createTextNode(" — the same role definition runs on any available harness; substitute it for <role>")
+    );
   }
 
-  function renderAgents(agents) {
-    agents = Array.isArray(agents) ? agents.slice() : [];
-    el.agentsCount.textContent = agents.length + " registered";
+  function renderAgents(data) {
+    var agents = (data && Array.isArray(data.agents)) ? data.agents.slice() : [];
+    el.agentCount.textContent = agents.length + " registered";
+
+    clear(el.agentsFresh);
+    clear(el.agentsIdle);
 
     if (!agents.length) {
-      el.agentsBody.innerHTML =
-        '<div class="empty-state">No agents registered on this bus yet. Agents call <code>register</code> when they join.</div>';
+      el.agentsQuiet.hidden = true;
+      el.noAgents.hidden = false;
       return;
     }
+    el.noAgents.hidden = true;
 
-    agents.sort(function (a, b) {
-      return (a.idle_s || 0) - (b.idle_s || 0);
-    });
-
-    var html = '<ul class="agent-list">';
+    var fresh = [];
+    var idle = [];
     agents.forEach(function (a) {
-      var idle = Number(a.idle_s) || 0;
-      var cls = "agent";
-      if (idle >= 300) cls += " idle-gone";
-      else if (idle >= 60) cls += " idle-long";
-      html += '<li class="' + cls + '">';
-      html += '<span class="agent-name">' + esc(a.name || "?") + "</span>";
-      html += '<span class="agent-idle" title="Seconds since last heartbeat">idle ' + esc(formatIdle(idle)) + "</span>";
-      html += "</li>";
+      var s = Number(a.idle_s) || 0;
+      if (s >= 60) idle.push(a);
+      else fresh.push(a);
     });
-    html += "</ul>";
-    el.agentsBody.innerHTML = html;
+    fresh.sort(function (a, b) { return (a.idle_s || 0) - (b.idle_s || 0); });
+    idle.sort(function (a, b) { return (a.idle_s || 0) - (b.idle_s || 0); });
+
+    fresh.forEach(function (a) {
+      var row = document.createElement("div");
+      row.className = "agent";
+      row.appendChild(text("span", "aname", a.name || "?"));
+      row.appendChild(text("span", "aidle", fmtIdle(a.idle_s)));
+      el.agentsFresh.appendChild(row);
+    });
+
+    el.agentsQuiet.hidden = idle.length === 0;
+    idle.forEach(function (a) {
+      var row = document.createElement("div");
+      row.className = "agent idle";
+      row.appendChild(text("span", "aname", a.name || "?"));
+      row.appendChild(text("span", "aidle", fmtIdle(a.idle_s)));
+      el.agentsIdle.appendChild(row);
+    });
   }
 
-  function appendMessages(messages) {
-    if (!Array.isArray(messages) || !messages.length) return 0;
-    var added = 0;
+  function updateFeedMeta(channel) {
+    var n = state.messageCount;
+    el.feedCount.textContent = n + (n === 1 ? " message" : " messages");
+    if (n) {
+      el.feedFoot.textContent =
+        "polling /read every 3s from cursor " + state.cursor +
+        " — new messages append here";
+    } else {
+      el.feedFoot.textContent =
+        "Nothing on " + (channel || "this channel") +
+        " yet. Normal before a wave starts; polling /read every 3s.";
+    }
+  }
+
+  function appendMessages(messages, channel) {
+    if (!Array.isArray(messages) || !messages.length) {
+      updateFeedMeta(channel);
+      return 0;
+    }
+
+    var wrap = el.feed;
     var atBottom =
-      el.feedWrap.scrollHeight - el.feedWrap.scrollTop - el.feedWrap.clientHeight < 48;
+      wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 48;
+    var added = 0;
 
     messages.forEach(function (m) {
-      var id = m._n != null ? String(m._n) : (m.ts + "|" + m.from + "|" + m.msg);
-      if (state.seenIds[id]) return;
-      state.seenIds[id] = true;
+      var id = m._n != null
+        ? String(m._n)
+        : String(m.ts) + "|" + String(m.from) + "|" + String(m.to) + "|" + String(m.msg);
+      if (state.seen[id]) return;
+      state.seen[id] = true;
       added++;
 
-      var li = document.createElement("li");
-      li.className = "msg";
-      li.setAttribute("data-n", id);
+      var row = document.createElement("div");
+      row.className = "msg";
+      row.setAttribute("data-anim", "row");
 
-      var ts = document.createElement("time");
-      ts.className = "msg-ts";
-      ts.dateTime = m.ts || "";
-      ts.textContent = formatTs(m.ts);
+      var t = document.createElement("time");
+      t.dateTime = m.ts || "";
+      t.textContent = fmtTs(m.ts);
+      row.appendChild(t);
 
       var body = document.createElement("div");
-      body.className = "msg-body";
+      body.className = "body";
 
       var route = document.createElement("div");
-      route.className = "msg-route";
-      route.innerHTML =
-        '<span class="msg-from">' + esc(m.from || "?") + "</span>" +
-        '<span class="msg-arrow" aria-hidden="true">→</span>' +
-        '<span class="msg-to">' + esc(m.to || "?") + "</span>" +
-        (m.topic ? '<span class="msg-topic">' + esc(m.topic) + "</span>" : "");
-
-      var text = document.createElement("p");
-      text.className = "msg-text";
-      text.textContent = m.msg == null ? "" : String(m.msg);
-
+      route.className = "route";
+      route.appendChild(text("span", "from", m.from || "?"));
+      var arrow = document.createElement("span");
+      arrow.className = "arrow";
+      arrow.setAttribute("aria-hidden", "true");
+      arrow.textContent = "→";
+      route.appendChild(arrow);
+      route.appendChild(text("span", "to", m.to || "?"));
+      if (m.topic) route.appendChild(text("span", "topic", m.topic));
       body.appendChild(route);
-      body.appendChild(text);
-      li.appendChild(ts);
-      li.appendChild(body);
-      el.feed.appendChild(li); // newest last
+
+      var p = document.createElement("p");
+      p.className = "text";
+      p.textContent = m.msg == null ? "" : String(m.msg);
+      body.appendChild(p);
+
+      row.appendChild(body);
+      el.messages.appendChild(row);
     });
 
-    state.messageCount = el.feed.children.length;
-    el.feedCount.textContent = state.messageCount + " message" + (state.messageCount === 1 ? "" : "s");
-    el.feedEmpty.style.display = state.messageCount ? "none" : "block";
+    state.messageCount = el.messages.children.length;
+    updateFeedMeta(channel);
 
     if (atBottom && added) {
-      el.feedWrap.scrollTop = el.feedWrap.scrollHeight;
+      wrap.scrollTop = wrap.scrollHeight;
     }
     return added;
+  }
+
+  function renderAll(data, offline) {
+    var st = deriveState(data, offline);
+    if (data && data.channel != null) {
+      el.channelName.textContent = String(data.channel);
+    }
+    el.liveLabel.textContent = ageLabel();
+    setStale(!!offline);
+    renderBanner(st, data);
+    renderDoctor(data, st);
+    renderHarnesses(data, st);
+    renderAgents(data);
+    updateFeedMeta(data && data.channel);
   }
 
   function fetchJson(path) {
@@ -1197,107 +1038,92 @@ h1 {
     });
   }
 
-  function applyStatus(data) {
-    state.status = data;
-    state.lastStatusAt = Date.now();
-    setOffline(false);
-
-    var r = deriveReadiness(data);
-    setReadiness(r.state, r.label, r.detail);
-
-    // Prefer higher cursor from status if feed hasn't advanced past it
-    if (typeof data.cursor === "number" && data.cursor > state.cursor && state.messageCount === 0) {
-      // don't skip messages — only use as hint when empty
-    }
-
-    renderMeta(data, false);
-    renderChecks(data.doctor);
-    renderHarnesses(data);
-    renderAgents(data.agents);
-  }
-
-  function pollMessages() {
-    // Omit `to` so the operator sees every from→to on the channel, not only broadcasts.
-    // (to=all only returns broadcasts; operators need agent↔agent traffic too.)
-    // Cursor is the highest _n on the channel; only messages with _n > since are returned.
-    var path = "/read?since=" + encodeURIComponent(String(state.cursor));
-    var wasOffline = state.online === false;
-    return fetchJson(path).then(function (data) {
-      setOffline(false);
-      if (data && data.ok === false) {
-        throw new Error(data.error || "read failed");
-      }
-      var msgs = (data && data.messages) || [];
-      // Ensure chronological order by _n
-      msgs = msgs.slice().sort(function (a, b) {
-        return (a._n || 0) - (b._n || 0);
+  function applyStatus(data, doctorLoaded) {
+    state.online = true;
+    state.lastOkAt = Date.now();
+    if (doctorLoaded) {
+      state.doctorLoaded = true;
+      state.lastStatus = data;
+    } else if (!state.lastStatus) {
+      // First paint from /status?doctor=0 — keep doctor null until full status lands
+      state.lastStatus = data;
+    } else {
+      // Fast refresh: merge live fields, preserve last known doctor
+      state.lastStatus = Object.assign({}, state.lastStatus, data, {
+        doctor: state.lastStatus.doctor
       });
-      var added = appendMessages(msgs);
-      if (data && typeof data.cursor === "number") {
-        state.cursor = data.cursor;
-      } else if (msgs.length) {
-        state.cursor = msgs[msgs.length - 1]._n || state.cursor;
-      }
-      if (state.status) {
-        renderMeta(Object.assign({}, state.status, {
-          messageCount: state.status.messageCount != null
-            ? Math.max(state.status.messageCount, state.messageCount)
-            : state.messageCount
-        }), false);
-      }
-      if (added) {
-        announce(added + " new message" + (added > 1 ? "s" : ""));
-      }
-      // Coming back online: refresh readiness immediately, don't wait for status interval
-      if (wasOffline) {
-        return pollStatus().then(function () { return data; }).catch(function () { return data; });
-      }
-      return data;
-    });
+    }
+    renderAll(state.lastStatus, false);
   }
 
-  function pollStatus() {
-    return fetchJson("/status").then(function (data) {
-      applyStatus(data);
+  function setOffline(err) {
+    state.online = false;
+    if (!state.lastOkAt) state.lastOkAt = Date.now();
+    renderAll(state.lastStatus, true);
+    if (err && err.message) {
+      // keep last known; banner already describes offline
+    }
+  }
+
+  function pollStatus(fast) {
+    var path = fast ? "/status?doctor=0" : "/status";
+    return fetchJson(path).then(function (data) {
+      applyStatus(data, !fast);
       return data;
     }).catch(function (err) {
-      setOffline(true, err && err.message ? err.message : "Status request failed.");
-      // Keep previous panels visible; only banner + readiness change.
+      setOffline(err);
       throw err;
     });
   }
 
-  function pollWho() {
-    return fetchJson("/who").then(function (data) {
-      if (data && Array.isArray(data.agents)) {
-        renderAgents(data.agents);
-        if (state.status) state.status.agents = data.agents;
+  function pollMessages() {
+    var path = "/read?since=" + encodeURIComponent(String(state.cursor));
+    var wasOffline = state.online === false;
+    return fetchJson(path).then(function (data) {
+      state.online = true;
+      state.lastOkAt = Date.now();
+      if (data && data.ok === false) {
+        throw new Error(data.error || "read failed");
+      }
+      var msgs = (data && data.messages) || [];
+      msgs = msgs.slice().sort(function (a, b) {
+        return (a._n || 0) - (b._n || 0);
+      });
+      var channel = state.lastStatus && state.lastStatus.channel;
+      var added = appendMessages(msgs, channel);
+      if (data && typeof data.cursor === "number") {
+        state.cursor = data.cursor;
+      } else if (msgs.length) {
+        var last = msgs[msgs.length - 1];
+        if (last._n != null) state.cursor = last._n;
+      }
+      updateFeedMeta(channel);
+      el.liveLabel.textContent = ageLabel();
+      if (state.lastStatus && state.online) {
+        setStale(false);
+      }
+      if (added) announce(added + " new message" + (added > 1 ? "s" : ""));
+      if (wasOffline) {
+        return pollStatus(false).then(function () { return data; }).catch(function () { return data; });
       }
       return data;
-    }).catch(function () {
-      // who is optional between status polls
     });
   }
 
   function tick() {
-    pollMessages()
-      .then(function () {
-        // Refresh agents more often than full doctor
-        return pollWho();
-      })
-      .catch(function (err) {
-        setOffline(true, err && err.message ? err.message : "Bus request failed.");
-      });
+    pollMessages().catch(function (err) {
+      setOffline(err);
+    });
   }
 
   function statusTick() {
-    pollStatus().catch(function () { /* offline handled */ });
+    pollStatus(false).catch(function () { /* offline handled */ });
   }
 
   function refreshNow() {
     el.btnRefresh.disabled = true;
     Promise.all([
-      pollStatus().catch(function () {}),
+      pollStatus(false).catch(function () {}),
       pollMessages().catch(function () {})
     ]).then(function () {
       el.btnRefresh.disabled = false;
@@ -1306,10 +1132,33 @@ h1 {
   }
 
   el.btnRefresh.addEventListener("click", refreshNow);
+  el.togglePass.addEventListener("click", function () {
+    state.showPassing = !state.showPassing;
+    if (state.lastStatus) renderAll(state.lastStatus, state.online === false);
+  });
 
-  // Initial load: status first (hero), then full feed from cursor 0
-  pollStatus()
+  // Age label tick
+  state.ageTimer = setInterval(function () {
+    el.liveLabel.textContent = ageLabel();
+    if (state.online === false) {
+      setStale(true);
+      // refresh offline age copy in banner/doctor summary
+      if (state.lastStatus) renderBanner("offline", state.lastStatus);
+      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+      el.checksSummary.textContent = "last known · " + age + "s ago";
+      el.harnessSummary.textContent = "last known · " + age + "s ago";
+      el.doctorStale.textContent =
+        "last result received " + age + "s ago — nothing has been re-checked since";
+      el.feedStale.textContent = "stale — nothing received for " + age + "s";
+    }
+  }, 1000);
+
+  // First paint: fast status (no doctor), then full status, then feed
+  pollStatus(true)
     .catch(function () {})
+    .then(function () {
+      return pollStatus(false).catch(function () {});
+    })
     .then(function () {
       return pollMessages().catch(function () {});
     })
@@ -1318,7 +1167,6 @@ h1 {
       state.statusTimer = setInterval(statusTick, STATUS_MS);
     });
 
-  // Pause polling when tab hidden to be polite
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
       if (state.pollTimer) clearInterval(state.pollTimer);
