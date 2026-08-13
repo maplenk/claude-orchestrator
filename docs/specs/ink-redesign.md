@@ -25,9 +25,12 @@ exactly the moment you need it.
 - Workspaces, Repositories and Settings views. Nav entries render disabled with a one-line
   "not yet" rather than being faked.
 - Multi-user anything. One machine, one user, no auth. The greeting is local and cosmetic.
-- Nothing. Success rate ships as a real fraction of closed runs from the first run onward —
-  `2/2` early, a percentage once there is enough history to mean anything. It is never a
-  placeholder.
+- Agent-to-agent "12/12 online" scale. Real sessions run one to four agents; the roster shows
+  what actually registered.
+
+Success rate is **in** scope: it ships as a real fraction of closed runs from the first run
+onward — `2/2` early, a percentage once there is enough history to mean anything. Never a
+placeholder.
 
 ## Acceptance criteria
 
@@ -89,9 +92,9 @@ timings; existing endpoints and all current tests still pass.
 
 **1b. Emit run events from `scripts/run-role`**
 Scope: `scripts/run-role` only.
-Open a run when a role starts, record its PID so the bus can pause it, advance its stage, close
-it with the exit status. Must degrade
-silently — if the bus is down, the role still runs. No new dependencies.
+Open a run when a role starts, record its PID so the bus can pause it, advance its stage, and
+close it with the exit status. Must degrade silently — if the bus is down, the role still runs.
+No new dependencies.
 Done when: `run-role … --harness pi` produces a run visible in `GET /runs`, and still works
 with the bus stopped.
 
