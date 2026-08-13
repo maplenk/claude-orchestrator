@@ -161,13 +161,33 @@ check("agent bus", OK if rc == 0 else WARN,
       None if rc == 0 else "starts automatically on session start, or: agent-bus serve",
       required=False)
 
-rc, out = sh(["claude", "mcp", "list"], timeout=20)
-registered = "agent-bus" in out
-check("agent bus registered as MCP", OK if registered else WARN,
-      "registered" if registered else "not registered (REST still works)",
-      None if registered else
-      f"claude mcp add agent-bus --transport http http://127.0.0.1:{BUS_PORT}/mcp",
-      required=False)
+# `claude mcp list` is cwd-scoped, so a project-scoped registration looks like
+# "not registered" from anywhere else. Read the config directly and say which.
+cfg = read_json(os.path.join(HOME, ".claude.json")) or {}
+user_scoped = "agent-bus" in (cfg.get("mcpServers") or {})
+projects = [proj for proj, c in (cfg.get("projects") or {}).items()
+            if "agent-bus" in ((c or {}).get("mcpServers") or {})]
+here = os.path.realpath(os.getcwd())
+here_scoped = any(os.path.realpath(p) == here for p in projects)
+
+if user_scoped:
+    mcp_status, mcp_detail, mcp_fix = OK, "registered for every project (user scope)", None
+elif here_scoped:
+    mcp_status, mcp_detail = OK, "registered for this project"
+    mcp_fix = (f"other projects need it too — claude mcp add -s user agent-bus "
+               f"--transport http http://127.0.0.1:{BUS_PORT}/mcp")
+elif projects:
+    mcp_status = WARN
+    mcp_detail = (f"registered for {len(projects)} other project(s), not this one: "
+                  f"{', '.join(os.path.basename(p) for p in projects[:3])}")
+    mcp_fix = (f"claude mcp add -s user agent-bus --transport "
+               f"http://127.0.0.1:{BUS_PORT}/mcp   # covers every project")
+else:
+    mcp_status, mcp_detail = WARN, "not registered (REST still works)"
+    mcp_fix = (f"claude mcp add -s user agent-bus --transport "
+               f"http://127.0.0.1:{BUS_PORT}/mcp")
+
+check("agent bus registered as MCP", mcp_status, mcp_detail, mcp_fix, required=False)
 
 
 # ---------------------------------------------------------------- harnesses
