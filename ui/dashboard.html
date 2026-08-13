@@ -595,14 +595,17 @@ a:hover{color:var(--ink)}
   }
 
   function setStale(flag) {
-    var v = flag ? "true" : "false";
+    // Only dim + age-label when we actually had a successful response to be stale against.
+    // Never-connected offline must not invent "last result received 0s ago".
+    var reallyStale = !!(flag && state.lastOkAt);
+    var v = reallyStale ? "true" : "false";
     el.doctorBody.setAttribute("data-stale", v);
     el.harnessBody.setAttribute("data-stale", v);
     el.agentsBody.setAttribute("data-stale", v);
-    el.doctorStale.hidden = !flag;
-    el.feedStale.hidden = !flag;
-    if (flag) {
-      var s = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
+    el.doctorStale.hidden = !reallyStale;
+    el.feedStale.hidden = !reallyStale;
+    if (reallyStale) {
+      var s = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
       el.doctorStale.textContent = "last result received " + s + "s ago — nothing has been re-checked since";
       el.feedStale.textContent = "stale — nothing received for " + s + "s";
     }
@@ -620,12 +623,18 @@ a:hover{color:var(--ink)}
     var usableLine = usable.length ? usable.join(", ") : "none";
 
     if (st === "offline") {
-      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
       el.bannerOffline.hidden = false;
       el.bannerOfflineDetail.textContent = "The bus at 127.0.0.1:8477 stopped answering.";
-      el.bannerOfflineSub.textContent =
-        "Everything below is the last response received, " + age +
-        " seconds ago. The page recovers on the next poll — no reload needed.";
+      if (!state.lastOkAt) {
+        // Never successfully connected — do not invent a freshness age.
+        el.bannerOfflineSub.textContent =
+          "Nothing has been received yet. Start the bus, then wait a moment — the page recovers on its own.";
+      } else {
+        var age = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+        el.bannerOfflineSub.textContent =
+          "Everything below is the last response received, " + age +
+          " seconds ago. The page recovers on the next poll — no reload needed.";
+      }
       el.bannerOfflineFix.setAttribute("data-copy", OFFLINE_FIX);
       el.bannerOfflineFix.querySelector(".copy-text").textContent = OFFLINE_FIX;
       return;
@@ -701,8 +710,12 @@ a:hover{color:var(--ink)}
       // the offline banner already explains the failure.
       el.doctorMissing.hidden = st !== "degraded";
       if (offline) {
-        var age0 = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
-        el.checksSummary.textContent = "last known · " + age0 + "s ago";
+        if (state.lastOkAt) {
+          var age0 = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+          el.checksSummary.textContent = "last known · " + age0 + "s ago";
+        } else {
+          el.checksSummary.textContent = "not yet received";
+        }
       } else {
         el.checksSummary.textContent = "not run";
       }
@@ -721,8 +734,12 @@ a:hover{color:var(--ink)}
     var passes = checks.filter(function (c) { return c && c.status === "ok"; });
 
     if (offline) {
-      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
-      el.checksSummary.textContent = "last known · " + age + "s ago";
+      if (state.lastOkAt) {
+        var age = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+        el.checksSummary.textContent = "last known · " + age + "s ago";
+      } else {
+        el.checksSummary.textContent = "not yet received";
+      }
     } else {
       el.checksSummary.textContent =
         fails.length + " fail · " + warns.length + " warn · " + passes.length + " ok";
@@ -804,8 +821,12 @@ a:hover{color:var(--ink)}
     down.sort(function (a, b) { return a.name.localeCompare(b.name); });
 
     if (st === "offline") {
-      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
-      el.harnessSummary.textContent = "last known · " + age + "s ago";
+      if (state.lastOkAt) {
+        var age = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+        el.harnessSummary.textContent = "last known · " + age + "s ago";
+      } else {
+        el.harnessSummary.textContent = "not yet received";
+      }
     } else {
       el.harnessSummary.textContent =
         up.length + " of " + names.length + " delegable";
@@ -1058,7 +1079,9 @@ a:hover{color:var(--ink)}
 
   function setOffline(err) {
     state.online = false;
-    if (!state.lastOkAt) state.lastOkAt = Date.now();
+    // Do not invent lastOkAt on failure — that would make "never connected"
+    // look like "just connected", and the offline banner would claim a last
+    // response that never arrived.
     renderAll(state.lastStatus, true);
     if (err && err.message) {
       // keep last known; banner already describes offline
@@ -1143,13 +1166,19 @@ a:hover{color:var(--ink)}
     if (state.online === false) {
       setStale(true);
       // refresh offline age copy in banner/doctor summary
-      if (state.lastStatus) renderBanner("offline", state.lastStatus);
-      var age = Math.max(0, Math.floor((Date.now() - (state.lastOkAt || Date.now())) / 1000));
-      el.checksSummary.textContent = "last known · " + age + "s ago";
-      el.harnessSummary.textContent = "last known · " + age + "s ago";
-      el.doctorStale.textContent =
-        "last result received " + age + "s ago — nothing has been re-checked since";
-      el.feedStale.textContent = "stale — nothing received for " + age + "s";
+      renderBanner("offline", state.lastStatus);
+      if (state.lastOkAt) {
+        var age = Math.max(0, Math.floor((Date.now() - state.lastOkAt) / 1000));
+        el.checksSummary.textContent = "last known · " + age + "s ago";
+        el.harnessSummary.textContent = "last known · " + age + "s ago";
+        el.doctorStale.textContent =
+          "last result received " + age + "s ago — nothing has been re-checked since";
+        el.feedStale.textContent = "stale — nothing received for " + age + "s";
+      } else {
+        // Never connected: no age, no "last known"
+        el.checksSummary.textContent = "not yet received";
+        el.harnessSummary.textContent = "not yet received";
+      }
     }
   }, 1000);
 
