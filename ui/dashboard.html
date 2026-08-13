@@ -22,7 +22,8 @@
   --hair:oklch(0.909 0.008 96);--hair-2:oklch(0.944 0.006 96);
   --ink:oklch(0.268 0.010 70);--ink-2:oklch(0.508 0.010 74);--ink-3:oklch(0.672 0.010 78);
   --celadon:oklch(0.585 0.055 155);--celadon-wash:oklch(0.951 0.021 150);
-  --warn:oklch(0.520 0.088 82);--bad:oklch(0.448 0.135 30);--bad-wash:oklch(0.959 0.024 30);
+  --warn:oklch(0.520 0.088 82);--warn-wash:oklch(0.955 0.022 82);
+  --bad:oklch(0.448 0.135 30);--bad-wash:oklch(0.959 0.024 30);
   --lift:0 1px 2px oklch(0.268 0.010 70/.045),0 10px 24px -18px oklch(0.268 0.010 70/.16);
   --face:"Helvetica Neue",Helvetica,"Segoe UI Variable Text","Segoe UI",sans-serif;
   --serif:"Hiragino Mincho ProN","Yu Mincho","Songti SC","Times New Roman",serif;
@@ -38,7 +39,8 @@
     --hair:oklch(0.304 0.008 72);--hair-2:oklch(0.256 0.008 72);
     --ink:oklch(0.928 0.006 92);--ink-2:oklch(0.724 0.009 80);--ink-3:oklch(0.564 0.009 80);
     --celadon:oklch(0.742 0.060 155);--celadon-wash:oklch(0.263 0.028 150);
-    --warn:oklch(0.782 0.090 82);--bad:oklch(0.848 0.120 30);--bad-wash:oklch(0.269 0.038 30);
+    --warn:oklch(0.782 0.090 82);--warn-wash:oklch(0.266 0.032 82);
+    --bad:oklch(0.848 0.120 30);--bad-wash:oklch(0.269 0.038 30);
     --lift:0 1px 2px oklch(0 0 0/.4),0 12px 28px -20px oklch(0 0 0/.7);
   }
 }
@@ -48,7 +50,8 @@
   --hair:oklch(0.304 0.008 72);--hair-2:oklch(0.256 0.008 72);
   --ink:oklch(0.928 0.006 92);--ink-2:oklch(0.724 0.009 80);--ink-3:oklch(0.564 0.009 80);
   --celadon:oklch(0.742 0.060 155);--celadon-wash:oklch(0.263 0.028 150);
-  --warn:oklch(0.782 0.090 82);--bad:oklch(0.848 0.120 30);--bad-wash:oklch(0.269 0.038 30);
+  --warn:oklch(0.782 0.090 82);--warn-wash:oklch(0.266 0.032 82);
+  --bad:oklch(0.848 0.120 30);--bad-wash:oklch(0.269 0.038 30);
   --lift:0 1px 2px oklch(0 0 0/.4),0 12px 28px -20px oklch(0 0 0/.7);
 }
 :root[data-theme="light"]{color-scheme:light}
@@ -202,6 +205,8 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
 .flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .fcard{border:1px solid var(--hair-2);border-radius:10px;padding:13px 14px;min-width:0;background:var(--paper)}
 .fcard.lead{border:1px solid var(--celadon);background:var(--celadon-wash)}
+.fcard.lead.warn{border-color:var(--warn);background:var(--warn-wash)}
+.fcard.lead.bad{border-color:var(--bad);background:var(--bad-wash)}
 .fcard-h{margin:0 0 9px;display:flex;align-items:baseline;gap:9px}
 .fmark{font-family:var(--serif);font-size:13px;color:var(--ink-3)}
 .ftitle{font-size:13.5px;font-weight:500;color:var(--ink)}
@@ -237,6 +242,7 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
 .prior-id{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);flex:none}
 .prior-title{flex:1;min-width:12ch;font-size:13px;color:var(--ink);overflow-wrap:anywhere}
 .prior-state{font-size:12px;color:var(--ink-2);flex:none}
+.prior-state.failed{color:var(--bad)}
 .prior-dur{font-family:var(--mono);font-size:12px;color:var(--ink-3);flex:none}
 
 .enso-wrap{display:flex;justify-content:center;padding:10px 0 16px}
@@ -976,6 +982,26 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
     return null;
   }
 
+  // Real verifier shapes: "NOT APPROVED: …", "❌ NOT APPROVED", "⚠️ BLOCKED", "✅ APPROVED"
+  function verdictTone(verdict) {
+    if (!verdict || verdict.msg == null) return "";
+    var msg = String(verdict.msg);
+    if (/not\s+approved/i.test(msg)) return "bad";
+    if (/\bblocked\b/i.test(msg)) return "warn";
+    return "";
+  }
+
+  function leadTone(lead, run, lastClosed, verdict) {
+    if (lead === 3) {
+      var vt = verdictTone(verdict);
+      if (vt === "bad" || (lastClosed && lastClosed.state === "failed")) return "bad";
+      if (vt === "warn") return "warn";
+      return "";
+    }
+    if (lead === 2 && run && run.state === "paused") return "warn";
+    return "";
+  }
+
   function firstScope(messages) {
     for (var i = 0; i < messages.length; i++) {
       if (messages[i] && messages[i].topic === "scope") return messages[i];
@@ -1104,7 +1130,9 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
         li.className = "prior-row";
         li.appendChild(text("span", "prior-id", r.id ? "#" + r.id : "—"));
         li.appendChild(text("span", "prior-title", r.title || "(untitled)"));
-        li.appendChild(text("span", "prior-state", r.state || ""));
+        li.appendChild(text("span",
+          "prior-state" + (r.state === "failed" ? " failed" : ""),
+          r.state || ""));
         li.appendChild(text("span", "prior-dur", fmtDuration(r.opened, r.closed)));
         ul.appendChild(li);
       });
@@ -1184,6 +1212,7 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
     if (verdict || (lastClosed && !run)) lead = 3;
     else if (run) lead = 2;
     else if (scope) lead = 0;
+    var tone = leadTone(lead, run, lastClosed, verdict);
 
     var cards = [
       { mark: "一", title: "Intent", line: intentLine, sub: intentSub },
@@ -1195,7 +1224,7 @@ h2{margin:0;font-size:15px;font-weight:500;color:var(--ink)}
     clear(el.flow);
     cards.forEach(function (f, i) {
       var card = document.createElement("div");
-      card.className = "fcard" + (i === lead ? " lead" : "");
+      card.className = "fcard" + (i === lead ? " lead" + (tone ? " " + tone : "") : "");
       var h = document.createElement("p");
       h.className = "fcard-h";
       h.appendChild(text("span", "fmark", f.mark));
