@@ -206,6 +206,11 @@ dependencies, which actually enforce the wave barrier.
 The bus is shaped by [agentchattr](https://github.com/bcurts/agentchattr), diverging where
 Claude Code's constraints differ (see Comms above).
 
+## Trademarks
+
+Model and vendor names identify the harnesses a role can run on. See
+[TRADEMARKS.md](TRADEMARKS.md) — this is an independent, unaffiliated tool.
+
 ## License
 
 MIT

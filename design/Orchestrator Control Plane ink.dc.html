@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<title>Harness Control · Harmony in orchestration</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --paper:oklch(0.968 0.008 96);--card:oklch(0.997 0.002 96);--sunk:oklch(0.951 0.009 96);
+  --side:oklch(0.974 0.010 122);
+  --hair:oklch(0.909 0.008 96);--hair-2:oklch(0.944 0.006 96);
+  --ink:oklch(0.268 0.010 70);--ink-2:oklch(0.508 0.010 74);--ink-3:oklch(0.672 0.010 78);
+  --celadon:oklch(0.585 0.055 155);--celadon-wash:oklch(0.951 0.021 150);
+  --warn:oklch(0.520 0.088 82);--bad:oklch(0.448 0.135 30);--bad-wash:oklch(0.959 0.024 30);
+  --lift:0 1px 2px oklch(0.268 0.010 70/.045),0 10px 24px -18px oklch(0.268 0.010 70/.16);
+  --face:"Helvetica Neue",Helvetica,"Segoe UI Variable Text","Segoe UI",sans-serif;
+  --serif:"Hiragino Mincho ProN","Yu Mincho","Songti SC","Times New Roman",serif;
+  --mono:"SF Mono",SFMono-Regular,"JetBrains Mono","IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:oklch(0.180 0.008 72);--card:oklch(0.226 0.008 72);--sunk:oklch(0.206 0.008 72);
+    --side:oklch(0.197 0.009 122);
+    --hair:oklch(0.304 0.008 72);--hair-2:oklch(0.256 0.008 72);
+    --ink:oklch(0.928 0.006 92);--ink-2:oklch(0.724 0.009 80);--ink-3:oklch(0.564 0.009 80);
+    --celadon:oklch(0.742 0.060 155);--celadon-wash:oklch(0.263 0.028 150);
+    --warn:oklch(0.782 0.090 82);--bad:oklch(0.848 0.120 30);--bad-wash:oklch(0.269 0.038 30);
+    --lift:0 1px 2px oklch(0 0 0/.4),0 12px 28px -20px oklch(0 0 0/.7);
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:var(--face);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;overflow-x:hidden}
+button{font-family:inherit}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--celadon);outline-offset:2px}
+a{color:var(--celadon);text-decoration:none}
+a:hover{color:var(--ink)}
+@keyframes rowin{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes flashcopy{from{color:var(--celadon);border-color:var(--celadon)}to{color:var(--ink-2);border-color:var(--hair)}}
+[data-anim="row"]{animation:rowin .22s ease-out both}
+[data-flash="1"]{animation:flashcopy .6s ease-out}
+[data-stale="true"]{opacity:.5}
+[data-art]{opacity:1}
+@media (prefers-color-scheme:dark){
+  [data-art="hero"],[data-art="side"]{filter:invert(1) hue-rotate(180deg) saturate(.85);opacity:.78}
+  [data-art="seal"]{filter:brightness(1.15)}
+}
+@media (max-width:1280px){[data-row="three"]{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
+@media (max-width:1120px){[data-row="top"]{grid-template-columns:minmax(0,1fr) !important}[data-flow]{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
+@media (max-width:900px){[data-shell]{grid-template-columns:minmax(0,1fr) !important}[data-side]{display:none !important}[data-row="three"]{grid-template-columns:minmax(0,1fr) !important}}
+@media (max-width:620px){[data-main]{padding:16px 14px 32px !important}[data-flow]{grid-template-columns:minmax(0,1fr) !important}[data-greet]{font-size:24px !important}[data-art="hero"]{display:none !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}}
+</style>
+</helmet>
+
+<div data-shell="1" style="display:grid;grid-template-columns:246px minmax(0,1fr);align-items:stretch;min-height:100vh">
+
+  <aside data-side="1" style="background:var(--side);border-right:1px solid var(--hair);padding:22px 16px 18px;display:flex;flex-direction:column;gap:20px;position:sticky;top:0;align-self:start;height:100vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:11px;padding:0 6px">
+      <span style="width:32px;height:32px;border:2.5px solid var(--ink);border-radius:50%;border-right-color:transparent;flex:none"></span>
+      <span style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;line-height:1.3;color:var(--ink)">Harness<br>control</span>
+      <img src="art/seal-ink.png" alt="" aria-hidden="true" data-art="seal" style="flex:none;width:15px;height:15px;display:block;align-self:flex-end;margin-bottom:1px">
+    </div>
+
+    <nav style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+        <a href="{{ n.href }}" style="{{ n.style }}"><span style="font-family:var(--serif);font-size:13px;color:var(--ink-3);width:16px;flex:none;text-align:center">{{ n.mark }}</span>{{ n.label }}</a>
+      </sc-for>
+    </nav>
+
+    <div style="flex:1;min-height:20px"></div>
+
+    <img src="art/sidebar-ink.png" alt="" aria-hidden="true" data-art="side" style="width:100%;height:210px;object-fit:cover;object-position:14% 100%;display:block;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 22%),linear-gradient(270deg,#000 0,#000 78%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(180deg,transparent 0,#000 22%),linear-gradient(270deg,#000 0,#000 78%,transparent 100%);mask-composite:intersect">
+
+    <div style="display:flex;align-items:center;gap:11px;padding:12px 6px 0;border-top:1px solid var(--hair-2)">
+      <span style="flex:none;width:30px;height:30px;border-radius:50%;background:var(--celadon-wash);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:14px;color:var(--ink-2)">静</span>
+      <span style="min-width:0;font-size:12.5px;line-height:1.35;color:var(--ink-2)">localhost<br><span style="font-size:11.5px;color:var(--ink-3)">single user · no auth</span></span>
+    </div>
+  </aside>
+
+  <main data-main="1" style="min-width:0;padding:20px 26px 34px">
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding-bottom:6px">
+      <span style="font-family:var(--serif);font-size:23px;letter-spacing:.06em;color:var(--ink)">調和</span>
+      <span style="font-size:13.5px;color:var(--ink-2)">Harmony in orchestration</span>
+      <span style="flex:1"></span>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:5px;background:var(--card);border:1px solid var(--hair);border-radius:9px;box-shadow:var(--lift);padding:4px 5px">
+        <span style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding:0 6px">State</span>
+        <sc-for list="{{ switcher }}" as="s" hint-placeholder-count="6">
+          <button type="button" onClick="{{ s.pick }}" style="{{ s.style }}">{{ s.label }}</button>
+        </sc-for>
+      </div>
+      <button type="button" onClick="{{ refresh }}" style="font-size:12.5px;color:var(--celadon);background:var(--card);border:1px solid var(--hair);border-radius:9px;box-shadow:var(--lift);padding:7px 13px;cursor:pointer" style-hover="border-color:var(--celadon)">Refresh</button>
+    </div>
+
+    <section style="position:relative;padding:22px 0 26px">
+      <img data-art="hero" src="art/hero-ink.png" alt="" aria-hidden="true" style="position:absolute;right:-10px;top:-4px;width:50%;max-width:700px;height:auto;display:block;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 44%),linear-gradient(180deg,#000 0,#000 62%,transparent 100%),linear-gradient(270deg,#000 0,#000 94%,transparent 100%);-webkit-mask-composite:source-in;mask-image:linear-gradient(90deg,transparent 0,#000 44%),linear-gradient(180deg,#000 0,#000 62%,transparent 100%),linear-gradient(270deg,#000 0,#000 94%,transparent 100%);mask-composite:intersect">
+      <p data-greet="1" style="position:relative;margin:0;display:flex;align-items:center;gap:13px;font-size:29px;line-height:1.2;font-weight:400;letter-spacing:-.02em;color:var(--ink)">{{ headline }}<span style="{{ dotStyle }}"></span></p>
+      <p style="position:relative;margin:11px 0 0;font-size:15px;color:var(--ink-2);max-width:56ch;text-wrap:pretty">{{ readySub }}</p>
+      <sc-if value="{{ isFail }}" hint-placeholder-val="{{ false }}">
+        <p style="position:relative;margin:9px 0 0;font-size:15px;font-weight:500;color:var(--bad);max-width:56ch;text-wrap:pretty">{{ failImperative }}</p>
+      </sc-if>
+    </section>
+
+    <div data-row="top" style="display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,1fr);gap:16px;align-items:stretch;margin-bottom:16px">
+
+      <section style="background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift);padding:16px 18px 18px;min-width:0">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:15px">
+          <h2 style="margin:0;font-size:15px;font-weight:500;color:var(--ink)">Current wave</h2>
+          <span style="font-family:var(--mono);font-size:11.5px;color:var(--celadon);background:var(--celadon-wash);border-radius:6px;padding:3px 9px">{{ channel }}</span>
+          <span style="flex:1"></span>
+          <span style="font-size:12px;color:var(--ink-3)">{{ flowNote }}</span>
+        </div>
+        <div data-flow="1" data-stale="{{ staleAttr }}" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">
+          <sc-for list="{{ flow }}" as="f" hint-placeholder-count="4">
+            <div style="{{ f.style }}">
+              <p style="margin:0 0 9px;display:flex;align-items:baseline;gap:9px"><span style="font-family:var(--serif);font-size:13px;color:var(--ink-3)">{{ f.mark }}</span><span style="font-size:13.5px;font-weight:500;color:var(--ink)">{{ f.title }}</span></p>
+              <p style="margin:0;font-size:12.5px;color:var(--ink);word-break:break-word;text-wrap:pretty">{{ f.line }}</p>
+              <p style="margin:5px 0 0;font-size:12px;color:var(--ink-3);text-wrap:pretty">{{ f.sub }}</p>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:13px 0 0;font-size:12.5px;color:var(--celadon)">{{ parallelNote }}</p>
+      </section>
+
+      <section style="background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift);padding:16px 18px 14px;min-width:0">
+        <h2 style="margin:0 0 6px;font-size:15px;font-weight:500;color:var(--ink)">Balance</h2>
+        <div style="display:flex;justify-content:center;padding:10px 0 16px">
+          <div style="{{ ensoStyle }}">
+            <span style="font-size:13.5px;line-height:1.35;color:var(--ink);text-align:center;text-wrap:pretty">{{ balanceWord }}</span>
+          </div>
+        </div>
+        <div data-stale="{{ staleAttr }}">
+          <sc-for list="{{ balance }}" as="b" hint-placeholder-count="4">
+            <p style="margin:0;display:flex;gap:14px;align-items:baseline;padding:8px 0;border-top:1px solid var(--hair-2)"><span style="flex:1;font-size:13.5px;color:var(--ink-2)">{{ b.k }}</span><span style="font-family:var(--mono);font-size:12.5px;color:var(--ink)">{{ b.v }}</span></p>
+          </sc-for>
+        </div>
+      </section>
+    </div>
+
+    <div data-row="three" style="display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1.1fr) minmax(0,1fr);gap:16px;align-items:start">
+
+      <section id="checks" style="scroll-margin-top:16px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift);min-width:0;overflow:hidden">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:16px 18px 4px">
+          <h2 style="margin:0;font-size:15px;font-weight:500;color:var(--ink)">Checks</h2>
+          <span style="flex:1"></span>
+          <span style="font-size:12px;color:var(--ink-3)">{{ checksSummary }}</span>
+        </div>
+        <p style="margin:0;padding:2px 18px 12px;font-size:12.5px;color:var(--ink-3);text-wrap:pretty">{{ checksLede }}</p>
+
+        <sc-if value="{{ doctorMissing }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:0 18px 18px">
+            <button type="button" title="Click to copy" data-copy="{{ degradedFix }}" onClick="{{ copy }}" style="display:block;width:100%;text-align:left;font-family:var(--mono);font-size:12px;color:var(--ink-2);background:var(--sunk);border:1px solid var(--hair);border-radius:8px;padding:10px 12px;cursor:copy;word-break:break-word" style-hover="border-color:var(--celadon);color:var(--celadon)">{{ degradedFix }}</button>
+          </div>
+        </sc-if>
+
+        <div data-stale="{{ staleAttr }}">
+          <sc-for list="{{ fails }}" as="c" hint-placeholder-count="0">
+            <div data-anim="row" style="padding:13px 18px;background:var(--bad-wash);border-top:1px solid var(--hair-2)">
+              <p style="margin:0;font-size:14.5px;font-weight:700;color:var(--ink)"><span style="display:inline-block;width:10px;height:10px;background:var(--bad);margin-right:11px;vertical-align:8%"></span>{{ c.name }}</p>
+              <p style="margin:5px 0 0 21px;font-size:13px;color:var(--ink-2);text-wrap:pretty">{{ c.detail }}</p>
+              <p style="margin:2px 0 0 21px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--bad)">Required</p>
+              <button type="button" title="Click to copy" data-copy="{{ c.fix }}" onClick="{{ copy }}" style="display:block;width:calc(100% - 21px);text-align:left;margin:10px 0 0 21px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--ink);background:var(--card);border:1px solid var(--bad);border-radius:8px;padding:10px 12px;cursor:copy;word-break:break-word" style-hover="border-color:var(--celadon);color:var(--celadon)">{{ c.fix }}</button>
+            </div>
+          </sc-for>
+          <sc-for list="{{ warns }}" as="c" hint-placeholder-count="2">
+            <div data-anim="row" style="padding:13px 18px;border-top:1px solid var(--hair-2)">
+              <p style="margin:0;font-size:14.5px;font-weight:500;color:var(--ink)"><span style="display:inline-block;width:7px;height:7px;background:var(--warn);transform:rotate(45deg);margin-right:13px;vertical-align:12%"></span>{{ c.name }}</p>
+              <p style="margin:5px 0 0 20px;font-size:13px;color:var(--ink-2);text-wrap:pretty">{{ c.detail }}</p>
+              <p style="margin:2px 0 0 20px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)">Optional</p>
+              <button type="button" title="Click to copy" data-copy="{{ c.fix }}" onClick="{{ copy }}" style="display:block;width:calc(100% - 20px);text-align:left;margin:10px 0 0 20px;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--ink-2);background:var(--sunk);border:1px solid var(--hair);border-radius:8px;padding:10px 12px;cursor:copy;word-break:break-word" style-hover="border-color:var(--celadon);color:var(--celadon)">{{ c.fix }}</button>
+            </div>
+          </sc-for>
+          <sc-if value="{{ showPassing }}" hint-placeholder-val="{{ false }}">
+            <div style="border-top:1px solid var(--hair-2);padding:10px 18px 4px">
+              <sc-for list="{{ passes }}" as="c" hint-placeholder-count="6">
+                <p style="margin:0 0 7px;font-size:12.5px;color:var(--ink-2)"><span style="display:inline-block;width:5px;height:5px;background:var(--ink-3);margin-right:13px;vertical-align:22%"></span>{{ c.name }}<span style="color:var(--ink-3);padding-left:10px">{{ c.detail }}</span></p>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ hasDoctor }}" hint-placeholder-val="{{ true }}">
+          <button type="button" onClick="{{ togglePassing }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;border:0;border-top:1px solid var(--hair-2);background:transparent;padding:12px 18px;font-size:13px;color:var(--ink-2);cursor:pointer;text-align:left" style-hover="color:var(--celadon)">{{ passingLabel }}<span style="color:var(--ink-3)">→</span></button>
+        </sc-if>
+      </section>
+
+      <section id="harnesses" style="scroll-margin-top:16px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift);min-width:0;overflow:hidden">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:16px 18px 4px">
+          <h2 style="margin:0;font-size:15px;font-weight:500;color:var(--ink)">Harness garden</h2>
+          <span style="flex:1"></span>
+          <span style="font-size:12px;color:var(--ink-3)">{{ harnessSummary }}</span>
+        </div>
+        <p style="margin:0;padding:2px 18px 10px;font-size:12.5px;color:var(--ink-3);text-wrap:pretty">A role is the job; a harness is the model that runs it. Substitute the role name for &lt;role&gt;.</p>
+        <div data-stale="{{ staleAttr }}">
+          <sc-for list="{{ harnessesUp }}" as="h" hint-placeholder-count="4">
+            <div style="display:flex;align-items:flex-start;gap:13px;padding:12px 18px;border-top:1px solid var(--hair-2);min-width:0">
+              <span style="flex:none;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--ink)">
+                <sc-if value="{{ h.isClaude }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 100 100" aria-hidden="true" style="width:20px;height:20px;display:block"><path fill="currentColor" d="M25.7146 63.2153L41.4393 54.3917L41.7025 53.6226L41.4393 53.1976H40.6705L38.0394 53.0359L29.054 52.7929L21.2624 52.4691L13.7134 52.0644L11.8111 51.6594L10.0303 49.3118L10.2123 48.138L11.8111 47.0657L14.0981 47.2681L19.1574 47.6119L26.7467 48.138L32.2516 48.4618L40.4073 49.3118H41.7025L41.8846 48.7857L41.4393 48.4618L41.0955 48.138L33.243 42.8155L24.7432 37.1894L20.2909 33.9513L17.8824 32.3119L16.6684 30.774L16.1422 27.4147L18.328 25.0062L21.2624 25.2088L22.0112 25.4112L24.9861 27.6979L31.3407 32.616L39.6381 38.7273L40.8525 39.7391L41.3381 39.395L41.399 39.1523L40.8525 38.2415L36.3394 30.0858L31.5227 21.7883L29.3775 18.3478L28.811 16.2837C28.6087 15.4334 28.4669 14.7252 28.4669 13.8549L30.9563 10.4753L32.3321 10.0303L35.6515 10.4756L37.0479 11.6897L39.112 16.4052L42.4513 23.8327L47.6321 33.9313L49.15 36.9265L49.9594 39.6991L50.2632 40.5491H50.7894V40.0632L51.2141 34.3766L52.0035 27.3944L52.7726 18.4087L53.0358 15.8793L54.2905 12.8435L56.7795 11.2041L58.7224 12.135L60.3212 14.422L60.0986 15.899L59.1474 22.0718L57.2857 31.7458L56.0713 38.2218H56.7795L57.5892 37.4121L60.8677 33.061L66.3723 26.18L68.801 23.448L71.6342 20.4325L73.4556 18.9957H76.8962L79.4255 22.7601L78.2926 26.6456L74.7509 31.1384L71.8163 34.943L67.607 40.6097L64.9758 45.1431L65.2188 45.5072L65.8464 45.4466L75.358 43.4228L80.4984 42.4917L86.6304 41.4393L89.4033 42.7346L89.7065 44.0502L88.6135 46.7419L82.0566 48.3607L74.3662 49.8989L62.9118 52.6109L62.77 52.7121L62.9321 52.9144L68.0925 53.4L70.2987 53.5214H75.7021L85.7601 54.2702L88.3912 56.0108L89.9697 58.1358L89.7065 59.7545L85.6589 61.8189L80.1949 60.5236L67.4452 57.4881L63.0735 56.3952H62.4665V56.7596L66.1093 60.3213L72.7877 66.3523L81.1461 74.1236L81.5707 76.0462L80.4984 77.5638L79.3649 77.4021L72.0186 71.8772L69.1854 69.3879L62.77 63.9844H62.3453V64.5509L63.8223 66.7164L71.6342 78.4544L72.0389 82.0567L71.4725 83.2308L69.4487 83.939L67.2222 83.534L62.6485 77.1189L57.9333 69.8937L54.1284 63.4177L53.6631 63.6809L51.4167 87.8651L50.3644 89.0995L47.9356 90.0303L45.9121 88.4924L44.8392 86.0031L45.9118 81.0852L47.2071 74.6701L48.2594 69.5699L49.2106 63.2356L49.7773 61.131L49.7367 60.9892L49.2715 61.0498L44.4954 67.607L37.23 77.4224L31.4825 83.5746L30.1063 84.1211L27.7181 82.8864L27.9408 80.6805L29.2763 78.7177L37.2297 68.5988L42.026 62.3248L45.1227 58.7025L45.1024 58.176H44.9204L23.7917 71.8975L20.0274 72.3831L18.4083 70.8655L18.6106 68.3761L19.3798 67.5664L25.7343 63.195L25.7146 63.2153Z"></path></svg></sc-if>
+                <sc-if value="{{ h.isCodex }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 100 100" aria-hidden="true" style="width:20px;height:20px;display:block"><path fill="currentColor" d="M83.7733 42.8087C84.6678 40.1149 84.9771 37.2613 84.6807 34.4385C84.3843 31.6156 83.489 28.8885 82.0544 26.4394C77.6908 18.8436 68.9203 14.9365 60.3548 16.7725C57.9831 14.1344 54.9591 12.1668 51.5864 11.0673C48.2137 9.96772 44.611 9.77498 41.1402 10.5084C37.6694 11.2418 34.4527 12.8755 31.8132 15.2455C29.1736 17.6155 27.204 20.6383 26.1024 24.0103C23.3212 24.5806 20.6938 25.738 18.3958 27.405C16.0977 29.0721 14.1819 31.2104 12.7765 33.6772C8.36538 41.2609 9.3669 50.8267 15.2527 57.3327C14.3549 60.0251 14.0424 62.8782 14.3361 65.7012C14.6298 68.5241 15.523 71.2518 16.9558 73.7017C21.325 81.3002 30.1011 85.207 38.6712 83.3686C40.5554 85.4904 42.8707 87.1858 45.4623 88.3416C48.0539 89.4975 50.8622 90.0871 53.6999 90.0713C62.4793 90.079 70.2575 84.4114 72.9393 76.0515C75.7201 75.4802 78.347 74.3225 80.6449 72.6555C82.9427 70.9886 84.8587 68.8507 86.2649 66.3846C90.6227 58.8145 89.6172 49.3005 83.7733 42.8087ZM53.6999 84.8356C50.1955 84.8411 46.801 83.6129 44.1116 81.3661L44.5848 81.098L60.5123 71.9043C60.9087 71.6718 61.2379 71.3402 61.4674 70.942C61.6969 70.5439 61.8189 70.0929 61.8215 69.6333V47.1769L68.5553 51.072C68.6225 51.1063 68.6694 51.1707 68.6814 51.2456V69.854C68.6641 78.1208 61.9667 84.8183 53.6999 84.8356ZM21.4977 71.0843C19.7402 68.0497 19.1092 64.4925 19.7156 61.0386L20.1885 61.3225L36.1321 70.5165C36.5266 70.748 36.9757 70.87 37.4331 70.87C37.8905 70.87 38.3396 70.748 38.7341 70.5165L58.21 59.2883V67.0628C58.2081 67.1031 58.1973 67.1424 58.1782 67.1779C58.1591 67.2134 58.1322 67.2441 58.0996 67.2678L41.9671 76.5722C34.798 80.7022 25.6388 78.2463 21.4977 71.0843ZM17.3026 36.3898C19.0723 33.3357 21.8655 31.0062 25.1878 29.8138V48.7376C25.1818 49.1949 25.2986 49.6453 25.5261 50.042C25.7535 50.4387 26.0833 50.7671 26.4809 50.9928L45.8622 62.1739L39.1283 66.069C39.0919 66.0883 39.0513 66.0984 39.0101 66.0984C38.9689 66.0984 38.9283 66.0883 38.8919 66.069L22.7908 56.7809C15.6359 52.6337 13.1822 43.4816 17.3026 36.3112V36.3898ZM72.624 49.2426L53.1792 37.9512L59.8976 34.0718C59.9341 34.0524 59.9747 34.0423 60.016 34.0423C60.0573 34.0423 60.0979 34.0524 60.1344 34.0718L76.2355 43.3761C78.6973 44.7966 80.7043 46.8882 82.0221 49.4065C83.3398 51.9249 83.914 54.7661 83.6775 57.5985C83.4411 60.431 82.4038 63.1377 80.6867 65.4027C78.9696 67.6677 76.6436 69.3975 73.9803 70.3901V51.466C73.9663 51.0096 73.834 50.5647 73.5962 50.1749C73.3584 49.7851 73.0234 49.4638 72.624 49.2426ZM79.3261 39.1657L78.8529 38.8815L62.9411 29.6089C62.5442 29.376 62.0924 29.2532 61.6322 29.2532C61.172 29.2532 60.7202 29.376 60.3233 29.6089L40.8629 40.8374V33.0628C40.8587 33.0233 40.8654 32.9834 40.882 32.9473C40.8987 32.9113 40.9248 32.8803 40.9575 32.8579L57.0586 23.5692C59.5263 22.1476 62.3478 21.458 65.193 21.5811C68.0382 21.7042 70.7896 22.6348 73.1253 24.2642C75.461 25.8936 77.2845 28.1543 78.3825 30.782C79.4806 33.4097 79.8077 36.2957 79.3257 39.1025V39.1657H79.3261ZM37.1888 52.9484L30.455 49.069C30.4213 49.0487 30.3925 49.0212 30.3707 48.9884C30.3488 48.9557 30.3345 48.9186 30.3286 48.8797V30.3188C30.3323 27.4714 31.1466 24.6839 32.6761 22.2822C34.2057 19.8805 36.3874 17.9639 38.9661 16.7564C41.5448 15.549 44.4139 15.1005 47.2381 15.4636C50.0622 15.8267 52.7247 16.9862 54.9141 18.8067L54.4409 19.0748L38.5134 28.2686C38.117 28.5011 37.7879 28.8327 37.5584 29.2308C37.329 29.629 37.207 30.0799 37.2045 30.5395L37.1888 52.9487V52.9484ZM40.8472 45.0632L49.5209 40.0643L58.21 45.0635V55.0615L49.5523 60.0608L40.8632 55.0615L40.8472 45.0632Z"></path></svg></sc-if>
+                <sc-if value="{{ h.isGrok }}" hint-placeholder-val="{{ false }}"><svg viewBox="0 0 34.06 33" aria-hidden="true" style="width:19px;height:19px;display:block"><path fill="currentColor" d="M13.2371 21.0407L24.3186 12.8506C24.8619 12.4491 25.6384 12.6057 25.8973 13.2294C27.2597 16.5185 26.651 20.4712 23.9403 23.1851C21.2297 25.8989 17.4581 26.4941 14.0108 25.1386L10.2449 26.8843C15.6463 30.5806 22.2053 29.6665 26.304 25.5601C29.5551 22.3051 30.562 17.8683 29.6205 13.8673L29.629 13.8758C28.2637 7.99809 29.9647 5.64871 33.449 0.844576C33.5314 0.730667 33.6139 0.616757 33.6964 0.5L29.1113 5.09055V5.07631L13.2343 21.0436"></path><path fill="currentColor" d="M10.9503 23.0313C7.07343 19.3235 7.74185 13.5853 11.0498 10.2763C13.4959 7.82722 17.5036 6.82767 21.0021 8.2971L24.7595 6.55998C24.0826 6.07017 23.215 5.54334 22.2195 5.17313C17.7198 3.31926 12.3326 4.24192 8.67479 7.90126C5.15635 11.4239 4.0499 16.8403 5.94992 21.4622C7.36924 24.9165 5.04257 27.3598 2.69884 29.826C1.86829 30.7002 1.0349 31.5745 0.36364 32.5L10.9474 23.0341"></path></svg></sc-if>
+                <sc-if value="{{ h.noMark }}" hint-placeholder-val="{{ false }}"><span title="pi coding agent" style="font-family:var(--serif);font-size:21px;line-height:1">π</span></sc-if>
+              </span>
+              <div style="min-width:0;flex:1">
+                <p style="margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px"><span style="font-size:14.5px;font-weight:500;color:var(--ink)">{{ h.name }}</span><span style="font-family:var(--mono);font-size:12px;color:var(--ink-2)">{{ h.model }}</span><span style="flex:1"></span><span style="font-size:12px;color:var(--celadon)">Delegable</span></p>
+                <p style="margin:3px 0 0;font-size:12px;color:var(--ink-3);text-wrap:pretty">{{ h.tag }} · {{ h.detail }}</p>
+                <button type="button" title="Click to copy" data-copy="{{ h.delegate }}" onClick="{{ copy }}" style="display:block;text-align:left;margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);background:var(--sunk);border:1px solid var(--hair);border-radius:8px;padding:7px 10px;cursor:copy;word-break:break-word" style-hover="border-color:var(--celadon);color:var(--celadon)">{{ h.delegate }}</button>
+              </div>
+            </div>
+          </sc-for>
+          <sc-for list="{{ harnessesDown }}" as="h" hint-placeholder-count="0">
+            <div style="display:flex;align-items:flex-start;gap:13px;padding:12px 18px;border-top:1px solid var(--hair-2);min-width:0;opacity:.66">
+              <span style="flex:none;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-family:var(--serif);font-size:19px">{{ h.initial }}</span>
+              <div style="min-width:0;flex:1">
+                <p style="margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px"><span style="font-size:14.5px;color:var(--ink-2)">{{ h.name }}</span><span style="flex:1"></span><span style="font-size:12px;color:var(--ink-3)">Not delegable</span></p>
+                <p style="margin:3px 0 0;font-size:12px;color:var(--ink-3);text-wrap:pretty">{{ h.detail }}</p>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:0;border-top:1px solid var(--hair-2);padding:12px 18px;font-size:13px;color:var(--ink-2)">Roles <span style="color:var(--ink-3)">{{ rolesLine }}</span></p>
+      </section>
+
+      <section id="messages" style="scroll-margin-top:16px;background:var(--card);border:1px solid var(--hair);border-radius:12px;box-shadow:var(--lift);min-width:0;overflow:hidden">
+        <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;padding:16px 18px 4px">
+          <h2 style="margin:0;font-size:15px;font-weight:500;color:var(--ink)">Recent traffic</h2>
+          <span style="flex:1"></span>
+          <span style="font-size:12px;color:var(--ink-3)">{{ feedCount }}</span>
+        </div>
+        <p style="margin:0;padding:2px 18px 10px;font-size:12.5px;color:var(--ink-3);text-wrap:pretty">{{ feedLede }}</p>
+        <div ref="{{ feedRef }}" tabindex="0" style="max-height:340px;overflow:auto;overscroll-behavior:contain">
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="6">
+            <div data-anim="row" style="padding:11px 18px;border-top:1px solid var(--hair-2)">
+              <p style="margin:0 0 3px;display:flex;align-items:baseline;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="color:var(--ink-2)">{{ m.from }}</span>to<span style="color:var(--ink-2)">{{ m.to }}</span><span style="flex:1"></span><span style="font-family:var(--mono);font-size:11px">{{ m.time }}</span></p>
+              <p style="margin:0;font-size:13px;line-height:1.5;color:var(--ink);word-break:break-word;text-wrap:pretty">{{ m.topicPrefix }}{{ m.msg }}</p>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid var(--hair-2);padding:14px 18px 16px">
+          <p style="margin:0 0 12px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)">Registered agents · {{ agentCount }}</p>
+          <div data-stale="{{ staleAttr }}">
+            <sc-for list="{{ agentsAll }}" as="a" hint-placeholder-count="4">
+              <p style="margin:0;display:flex;gap:14px;align-items:baseline;padding:5px 0"><span style="flex:1;min-width:0;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span><span style="font-family:var(--mono);font-size:12px;color:var(--ink-3)">{{ a.idle }}</span></p>
+            </sc-for>
+            <sc-if value="{{ noAgents }}" hint-placeholder-val="{{ false }}">
+              <p style="margin:0;font-size:13px;color:var(--ink-3);text-wrap:pretty">Nobody registered yet. An agent appears the moment it registers on the bus.</p>
+            </sc-if>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer style="display:flex;align-items:center;justify-content:center;gap:16px;padding:38px 0 4px">
+      <p style="margin:0;font-family:var(--serif);font-size:15px;line-height:1.7;color:var(--ink-2);text-align:center;max-width:46ch;text-wrap:pretty">A role is the intention; a harness is the hand. The channel log is the only record that outlives the wave.</p>
+      <img src="art/seal-ink.png" alt="Harness Control seal" data-art="seal" style="flex:none;width:34px;height:34px;display:block">
+    </footer>
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;initialState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;healthy&quot;,&quot;gaps&quot;,&quot;broken&quot;,&quot;degraded&quot;,&quot;offline&quot;,&quot;empty&quot;],&quot;default&quot;:&quot;healthy&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Mockup&quot;},&quot;showPassing&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Mockup&quot;}}">
+const CHECKS = [
+  ["plugin manifest valid", "ok", "orchestrator@0.1.0 loaded", "", true],
+  ["plugin hook manifests", "ok", "no duplicate-hooks conflicts", "", true],
+  ["tools on ~/.claude/bin", "ok", "all four linked", "", true],
+  ["SessionStart hook installed", "ok", "runs on every session", "", true],
+  ["orchestrator guard active", "ok", "source edits blocked in main session", "", true],
+  ["Orchestrator output style", "ok", "current: Orchestrator", "", false],
+  ["agent bus registered as MCP", "ok", "registered", "", false],
+  ["agent bus reachable", "ok", "127.0.0.1:8477 responding", "", true],
+  ["board directory writable", "ok", ".claude/orchestrator/board", "", true],
+  ["board gitignored", "ok", "log stays out of commits", "", false],
+  ["role: developer", "ok", "packaged", "", true],
+  ["role: ui-developer", "ok", "packaged", "", false],
+  ["role: verifier", "ok", "packaged", "", true],
+  ["harnesses.json readable", "ok", "4 registered, default claude", "", false],
+  ["harness: claude", "ok", "built-in, worktree isolation", "", true],
+  ["harness: codex", "ok", "3 model(s) via CLIProxyAPI", "", false],
+  ["harness: grok", "ok", "14 model(s) via CLIProxyAPI", "", false],
+  ["harness: pi", "ok", "2 provider(s) authenticated", "", false],
+  ["usable harnesses", "ok", "claude, codex, grok, pi", "", true]
+].map(function (r) { return { name: r[0], status: r[1], detail: r[2], fix: r[3], required: r[4] }; });
+
+const GAP_WARNS = {
+  "Orchestrator output style": { status: "warn", detail: "current: Default", fix: "/config -> Output style -> Orchestrator" },
+  "agent bus registered as MCP": { status: "warn", detail: "not registered (REST still works)", fix: "claude mcp add agent-bus --transport http http://127.0.0.1:8477/mcp" }
+};
+
+const HARNESSES = [
+  { name: "claude", initial: "C", tag: "Default, built-in", model: "sonnet-4-5", detail: "worktree isolation", delegate: "Agent(orchestrator:<role>)", available: true },
+  { name: "codex", initial: "O", tag: "codex@openai-codex", model: "gpt-5-codex", detail: "3 models via CLIProxyAPI", delegate: "run-role <role> --harness codex", available: true },
+  { name: "grok", initial: "X", tag: "grok-build@xai-grok-build", model: "grok-code-fast-1", detail: "14 models via CLIProxyAPI", delegate: "run-role <role> --harness grok", available: true },
+  { name: "pi", initial: "π", tag: "pi-coding-agent", model: "kimi-k2 · deepseek-v3", detail: "ui-developer runs kimi-k2", delegate: "run-role <role> --harness pi", available: true }
+];
+
+const MESSAGES = [
+  { time: "14:19:52", from: "orchestrator", to: "all", topic: "scope", msg: "app/auth.php is off-limits this wave" },
+  { time: "14:21:04", from: "developer", to: "orchestrator", topic: "", msg: "task 1 done; 2 tests red in OrderReportTest" },
+  { time: "14:21:40", from: "orchestrator", to: "developer", topic: "", msg: "leave them red — verifier reproduces before you patch" },
+  { time: "14:23:11", from: "ui-developer", to: "orchestrator", topic: "", msg: "dashboard.html: readiness statement and check list landed, dark mode checked" },
+  { time: "14:24:47", from: "verifier", to: "all", topic: "verdict", msg: "NOT APPROVED: criterion 3 unmapped" },
+  { time: "14:25:02", from: "orchestrator", to: "verifier", topic: "", msg: "map it to the offline path and re-run on grok" }
+];
+
+const AGENTS = [
+  { name: "orchestrator", idle_s: 3 },
+  { name: "developer", idle_s: 41 },
+  { name: "verifier", idle_s: 128 },
+  { name: "ui-developer", idle_s: 612 }
+];
+
+const NAV = [
+  ["Orchestration", "#top", "調"],
+  ["Checks", "#checks", "検"],
+  ["Harnesses", "#harnesses", "馬"],
+  ["Messages", "#messages", "言"],
+  ["Channel log", "#messages", "記"],
+  ["Doctor", "#checks", "医"]
+];
+
+const DEGRADED_FIX = "restart the session — the SessionStart hook links orchestrator-doctor into ~/.claude/bin";
+
+function fmtIdle(s) {
+  if (s < 60) return "idle " + s + "s";
+  const m = Math.floor(s / 60), r = s % 60;
+  return "idle " + m + "m " + (r < 10 ? "0" : "") + r + "s";
+}
+
+class Component extends DCLogic {
+  state = { st: null, showPassing: null, extra: [], now: 0 };
+  feedRef = React.createRef();
+
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState(s => ({ now: s.now + 1 })), 1000);
+    this.scrollFeed();
+  }
+
+  scrollFeed() {
+    const el = this.feedRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+  componentDidUpdate(prevProps) {
+    if (prevProps.initialState !== this.props.initialState) this.setState({ st: null });
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  cur() { return this.state.st || this.props.initialState || "gaps"; }
+
+  checksFor(st) {
+    if (st === "degraded") return null;
+    if (st === "offline") st = "gaps";
+    return CHECKS.map(c => {
+      const o = Object.assign({}, c);
+      if ((st === "gaps" || st === "broken" || st === "empty") && GAP_WARNS[c.name]) Object.assign(o, GAP_WARNS[c.name]);
+      if (st === "broken" && c.name === "tools on ~/.claude/bin") {
+        o.status = "fail";
+        o.detail = "0 of 4 linked — run-role, agent-bus, agent-board and orchestrator-doctor are all missing.";
+        o.fix = "restart the session so the SessionStart hook can link ~/.claude/bin, or: ln -sf ~/.claude/plugins/cache/orchestrator-marketplace/orchestrator/0.1.0/tools/* ~/.claude/bin/";
+      }
+      if (st === "broken" && c.name === "usable harnesses") o.detail = "claude only — run-role is not on PATH";
+      return o;
+    });
+  }
+
+  renderVals() {
+    const st = this.cur();
+    const checks = this.checksFor(st);
+    const offline = st === "offline";
+    const empty = st === "empty";
+
+    const fails = checks ? checks.filter(c => c.status === "fail") : [];
+    const warns = checks ? checks.filter(c => c.status === "warn") : [];
+    const passes = checks ? checks.filter(c => c.status === "ok") : [];
+
+    const messages = (empty ? [] : MESSAGES).concat(this.state.extra)
+      .map(m => Object.assign({}, m, { topicPrefix: m.topic ? m.topic + " — " : "" }));
+    const agents = empty ? [] : AGENTS;
+    const showPassing = this.state.showPassing == null ? !!this.props.showPassing : this.state.showPassing;
+
+    let headline = "", readySub = "", failImperative = "", balanceWord = "", dot = "var(--celadon)";
+    if (st === "healthy") {
+      headline = "Everything in balance";
+      readySub = "All nineteen checks pass. claude, codex, grok and pi are all delegable.";
+      balanceWord = "Everything in balance";
+    } else if (st === "gaps") {
+      headline = "Ready, with two gaps";
+      readySub = "Every required check passes and all four harnesses are delegable. Each gap takes one command, and nothing breaks until you get to it.";
+      balanceWord = "Ready · two gaps";
+      dot = "var(--warn)";
+    } else if (st === "empty") {
+      headline = "Ready, nothing started";
+      readySub = "Every required check passes. No agent has registered and the channel log is empty — normal before a wave begins.";
+      balanceWord = "Waiting to begin";
+      dot = "var(--warn)";
+    } else if (st === "broken") {
+      headline = "Delegation will not work";
+      readySub = "run-role, the bus CLI and the doctor all resolve through ~/.claude/bin. Until it is linked, a delegated wave fails at launch rather than reporting an error.";
+      failImperative = "Restart the session to link it — the full command is on the failing check below.";
+      balanceWord = "One required check failing";
+      dot = "var(--bad)";
+    } else if (st === "degraded") {
+      headline = "Live, but unverified";
+      readySub = "The doctor script is not installed. The bus, harnesses and agents are reported directly by the server; nothing has been checked.";
+      balanceWord = "Health unknown";
+      dot = "var(--ink-3)";
+    } else if (offline) {
+      headline = "The bus stopped answering";
+      readySub = "Everything below is the last response received, 34 seconds ago. The page recovers on the next poll — no reload needed. Start the bus with: agent-bus serve";
+      balanceWord = "No connection";
+      dot = "var(--ink-3)";
+    }
+
+    const switcher = [["healthy", "Healthy"], ["gaps", "Gaps"], ["broken", "Broken"], ["degraded", "Degraded"], ["offline", "Offline"], ["empty", "Empty"]].map(([k, label]) => ({
+      label,
+      pick: () => this.setState({ st: k, extra: [] }, () => this.scrollFeed()),
+      style: "font-size:12px;padding:4px 10px;cursor:pointer;white-space:nowrap;border-radius:6px;border:0;" +
+        (k === st ? "background:var(--celadon-wash);color:var(--celadon);font-weight:500" : "background:transparent;color:var(--ink-3)")
+    }));
+
+    const nav = NAV.map(([label, href, mark], i) => ({
+      label, href, mark,
+      style: "display:flex;align-items:baseline;gap:11px;padding:8px 11px;font-size:13.5px;border-radius:9px;" +
+        (i === 0 ? "background:var(--celadon-wash);color:var(--ink);font-weight:500" : "color:var(--ink-2)")
+    }));
+
+    const withMark = h => Object.assign({}, h, {
+      isClaude: h.name === "claude",
+      isCodex: h.name === "codex",
+      isGrok: h.name === "grok",
+      noMark: ["claude", "codex", "grok"].indexOf(h.name) === -1
+    });
+    const harnessList = HARNESSES.map(h => {
+      const o = Object.assign({}, h);
+      if (st === "broken" && h.name !== "claude") { o.available = false; o.detail = "run-role is not on PATH"; }
+      if (st === "degraded" && h.name === "pi") { o.available = false; o.detail = "pi CLI not found"; }
+      return o;
+    });
+    const up = harnessList.filter(h => h.available).map(withMark);
+    const down = harnessList.filter(h => !h.available).map(withMark);
+
+    const lastVerdict = messages.slice().reverse().filter(m => m.topic === "verdict")[0];
+    const scopeMsg = messages.filter(m => m.topic === "scope")[0];
+    const card = "border:1px solid var(--hair-2);border-radius:10px;padding:13px 14px;min-width:0;background:var(--paper)";
+    const lead = "border:1px solid var(--celadon);border-radius:10px;padding:13px 14px;min-width:0;background:var(--celadon-wash)";
+    const flow = [
+      { mark: "一", title: "Intent", line: scopeMsg ? scopeMsg.msg : "No scope posted", sub: scopeMsg ? "from " + scopeMsg.from + " at " + scopeMsg.time : "the wave has not been scoped", style: lead },
+      { mark: "二", title: "Delegate", line: up.length + " of " + harnessList.length + " harnesses", sub: up.length ? up.map(h => h.name).join(", ") : "none delegable", style: card },
+      { mark: "三", title: "Implement", line: agents.length ? agents.length + " agents registered" : "no agents registered", sub: !agents.length ? "waiting for a register call" : (offline ? "idle times stopped updating 34s ago" : "quietest " + fmtIdle(Math.max.apply(null, agents.map(a => a.idle_s)))), style: card },
+      { mark: "四", title: "Verify", line: lastVerdict ? lastVerdict.msg : "No verdict yet", sub: lastVerdict ? "from " + lastVerdict.from + " at " + lastVerdict.time : "the verifier has not reported", style: card }
+    ];
+
+    const balance = [
+      { k: "Registered agents", v: String(agents.length) },
+      { k: "Delegable harnesses", v: up.length + " / " + harnessList.length },
+      { k: "Messages on channel", v: String(messages.length) },
+      { k: "Checks passing", v: checks ? passes.length + " / " + checks.length : "not run" }
+    ];
+
+    return {
+      nav, switcher, flow, balance, balanceWord,
+      dotStyle: "flex:none;width:9px;height:9px;border-radius:50%;background:" + dot,
+      ensoStyle: "width:132px;height:132px;border:3px solid " + (st === "broken" ? "var(--bad)" : "var(--ink)") +
+        ";border-radius:50%;border-right-color:transparent;display:flex;align-items:center;justify-content:center;padding:18px",
+      refresh: () => this.setState({ now: 0, extra: [] }, () => this.scrollFeed()),
+      copy: (e) => {
+        const btn = e.currentTarget, text = btn.getAttribute("data-copy") || "";
+        const flash = () => {
+          btn.setAttribute("data-flash", "1");
+          setTimeout(() => btn.removeAttribute("data-flash"), 620);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(flash, flash);
+        else flash();
+      },
+      isFail: st === "broken",
+      headline, readySub, failImperative,
+      degradedFix: DEGRADED_FIX,
+      channel: "feat/dashboard",
+      flowNote: offline ? "Last known, 34s ago" : "Read from roles, agents and the channel log",
+      parallelNote: agents.length > 1 ? agents.length + " agents working in parallel on this channel" : "No parallel work in flight",
+      staleAttr: offline ? "true" : null,
+      doctorMissing: !checks,
+      hasDoctor: !!checks,
+      fails, warns, passes,
+      checksSummary: !checks ? "Not run" : (offline ? "Last known, 34s ago" : fails.length + " failing · " + warns.length + " optional · " + passes.length + " passing"),
+      checksLede: !checks
+        ? "The doctor script is not installed, so nothing has been verified."
+        : (fails.length ? "A required check is failing. Delegation is blocked until it is fixed."
+                        : (warns.length ? "Optional gaps only. Nothing here blocks a wave." : "Nothing to do.")),
+      showPassing,
+      passingLabel: (showPassing ? "Hide the " : "Show the ") + passes.length + " passing checks",
+      togglePassing: () => this.setState(s => ({ showPassing: (s.showPassing == null ? !this.props.showPassing : !s.showPassing) })),
+      harnessesUp: up,
+      harnessesDown: down,
+      harnessSummary: offline ? "Last known, 34s ago" : up.length + " of " + harnessList.length + " delegable",
+      rolesLine: "developer · ui-developer · verifier",
+      feedRef: this.feedRef,
+      messages,
+      feedCount: messages.length + (messages.length === 1 ? " message" : " messages"),
+      feedLede: offline
+        ? "Stale — nothing received for 34 seconds."
+        : (messages.length ? "Newest last. Polling every three seconds from cursor " + (41 + this.state.extra.length) + "."
+                           : "Nothing on this channel yet — normal before a wave starts."),
+      agentsAll: agents.map(a => ({ name: a.name, idle: fmtIdle(a.idle_s) })),
+      noAgents: agents.length === 0,
+      agentCount: agents.length + " registered"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

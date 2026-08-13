@@ -2,3 +2,6 @@
 *.bak
 # runtime state written by agent-bus when the plugin runs from its own repo
 .claude/orchestrator/
+
+# design mockups keep their canvas runtime out of the repo
+support.js
