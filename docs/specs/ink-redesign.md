@@ -11,7 +11,7 @@ The reference is not a reskin. Roughly half of what it shows does not exist yet:
 | --- | --- |
 | Run #6842, title, 12m 34s, prior runs | no run concept at all |
 | Intent → Coordinator → Implementors → Verifier → Complete | no stages |
-| Pause control, Complete state | no run lifecycle |
+| Pause control, Complete state | no run lifecycle — but pause is genuinely possible, see below |
 | Success rate 98.6% | no outcome history |
 | Agents Online 12/12, per-agent model and role | `{name, idle_s}` only |
 | Workspaces, Repositories, Audit Log | not concepts in this tool |
@@ -25,8 +25,9 @@ exactly the moment you need it.
 - Workspaces, Repositories and Settings views. Nav entries render disabled with a one-line
   "not yet" rather than being faked.
 - Multi-user anything. One machine, one user, no auth. The greeting is local and cosmetic.
-- Success rate until there is real outcome history to compute it from. It appears in wave 3
-  or not at all — never as a placeholder number.
+- Nothing. Success rate ships as a real fraction of closed runs from the first run onward —
+  `2/2` early, a percentage once there is enough history to mean anything. It is never a
+  placeholder.
 
 ## Acceptance criteria
 
@@ -35,6 +36,11 @@ exactly the moment you need it.
 2. A delegation started through `run-role` or the Agent tool appears as a run, advances through
    its stages, and ends in `complete` or `failed` with a real duration.
 3. Registered agents carry role, harness, model and liveness — no invented online count.
+3b. **Pause actually pauses.** `POST /runs/<id>/pause` sends `SIGSTOP` to the delegated
+   process and `resume` sends `SIGCONT` — verified as a real freeze and clean resume, not a
+   kill. The run records `paused`. Caveat to surface in the UI: a process frozen mid-request to
+   a model API may have its socket time out during a long pause, so pausing is safe for a
+   breather and risky for an hour. Say so at the control rather than in a docs footnote.
 4. The dashboard renders the ink shell: sidebar, kanji-marked nav, hero with wash, flow card,
    balance enso, agent garden, activity feed, seal footer.
 5. Every number on screen traces to an API field. No placeholder metrics anywhere.
@@ -42,7 +48,10 @@ exactly the moment you need it.
    an age.
 7. Both themes correct; no token defined only inside the dark block.
 8. No horizontal body scroll at a true 320px viewport, achieved by layout.
-9. Inlined artwork adds **under 120KB** total to `ui/dashboard.html`.
+8b. The orchestration view must look deliberate at **1 run, 2 agents and 4 messages** — the
+   real density of a single-developer session, not the mockup's. That sparse state is what gets
+   screenshotted for approval.
+9. Inlined artwork adds **under 130KB** total to `ui/dashboard.html` (measured: 124KB).
 10. `tests/run-tests` passes, including new coverage for the runs API.
 
 ## Constraints
@@ -51,8 +60,13 @@ exactly the moment you need it.
 - The bus stays dependency-free Python stdlib. No new packages.
 - Run storage is a JSONL file beside the message board, gitignored, per channel.
 - Backwards compatible: `/status`, `/read`, `/who`, `/mcp` keep working unchanged.
-- **Artwork**: JPEG at ~q72 with a CSS mask for the fade, not PNG alpha — measured at 71KB
-  inlined versus 1.3MB as PNG. Sources in `design/art/`.
+- **Artwork**: WebP with alpha, in `design/art/` — 124KB inlined, against 1.3MB as PNG. Alpha
+  is required: the washes sit on both the paper and the ink ground, so a flattened image breaks
+  one theme. Encoded with `cwebp -size 26000 -alpha_q 50`; a 58KB encode was indistinguishable
+  side by side, so the smaller one wins.
+- **Dark treatment**: `filter: invert(1) hue-rotate(180deg) saturate(.7) brightness(.85)`.
+  Inverting alone flips hue and turns the blossoms cyan and the sun teal; the hue-rotate puts
+  them back. Verified over both grounds. Do not ship a second dark asset — the filter is free.
 - **Vendor marks**: use plain wordmarks. `design/artwork-and-marks.md` notes several vendors
   forbid the rounded-square badge treatment the reference uses, and that a wordmark is always
   safe. Ship `TRADEMARKS.md` with the nominative-use statement.
@@ -75,7 +89,8 @@ timings; existing endpoints and all current tests still pass.
 
 **1b. Emit run events from `scripts/run-role`**
 Scope: `scripts/run-role` only.
-Open a run when a role starts, advance its stage, close it with the exit status. Must degrade
+Open a run when a role starts, record its PID so the bus can pause it, advance its stage, close
+it with the exit status. Must degrade
 silently — if the bus is down, the role still runs. No new dependencies.
 Done when: `run-role … --harness pi` produces a run visible in `GET /runs`, and still works
 with the bus stopped.
