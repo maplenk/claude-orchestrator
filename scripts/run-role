@@ -19,13 +19,14 @@ USER_AGENTS="$HOME/.claude/agents"
 PLUGIN_AGENTS="$PLUGIN_ROOT/agents"
 THINKING="${RUN_ROLE_THINKING:-medium}"
 ROLE="${1:-}"; shift || true
-HARNESS=""; MODEL=""; READONLY=0
+HARNESS=""; MODEL=""; READONLY=0; WORKTREE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --harness) HARNESS="$2"; shift 2 ;;
     --model)   MODEL="$2";   shift 2 ;;
     --read-only) READONLY=1; shift ;;
+    --worktree) WORKTREE=1; shift ;;
     --) shift; break ;;
     *) break ;;
   esac
@@ -33,7 +34,7 @@ done
 BRIEF="$*"
 
 if [[ -z "$ROLE" || -z "$HARNESS" || -z "$BRIEF" ]]; then
-  echo "usage: run-role <role> --harness <codex|grok|pi> [--model M] [--read-only] -- <brief>" >&2
+  echo "usage: run-role <role> --harness <codex|grok|pi> [--model M] [--read-only] [--worktree] -- <brief>" >&2
   echo "roles: $(ls "$USER_AGENTS" "$PLUGIN_AGENTS" 2>/dev/null | grep '\.md$' | sed 's/\.md$//' | sort -u | tr '\n' ' ')" >&2
   exit 64
 fi
@@ -62,6 +63,28 @@ fi
 # Strip YAML frontmatter — the body is the role definition.
 ROLE_BODY="$(awk 'BEGIN{n=0} /^---[[:space:]]*$/{n++; next} n>=2' "$ROLE_FILE")"
 [[ -n "$ROLE_BODY" ]] || { echo "run-role: $ROLE_FILE has no body" >&2; exit 65; }
+
+# Isolation is opt-in, never automatic: cutting a worktree changes where the
+# agent's work lands, and that is the caller's decision to make explicitly.
+if [[ $WORKTREE -eq 1 ]]; then
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "run-role: --worktree needs a git repo" >&2; exit 69; }
+  REPO_ROOT="$(git rev-parse --show-toplevel)"
+  BASE_SHA="$(git rev-parse --short HEAD)"
+  BASE_REF="$(git rev-parse --abbrev-ref HEAD)"
+  WT_DIR="$REPO_ROOT/.claude/orchestrator/worktrees/$ROLE-$$"
+  WT_BRANCH="orchestrator/$ROLE-$$"
+  mkdir -p "$(dirname "$WT_DIR")"
+  git worktree add -q -b "$WT_BRANCH" "$WT_DIR" HEAD || {
+    echo "run-role: could not create worktree at $WT_DIR" >&2; exit 70; }
+  cd "$WT_DIR" || exit 70
+  # Verify the base by ancestry, not by name — a worktree cut from the wrong
+  # lineage makes merge work silently resolve to no-ops.
+  echo "run-role: worktree $WT_DIR" >&2
+  echo "run-role: branch $WT_BRANCH cut from $BASE_REF @ $BASE_SHA" >&2
+  echo "run-role: when finished — review it, then: git -C \"$REPO_ROOT\" merge $WT_BRANCH" >&2
+  echo "run-role: remove with — git -C \"$REPO_ROOT\" worktree remove $WT_DIR" >&2
+fi
 
 echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 

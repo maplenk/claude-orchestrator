@@ -221,6 +221,29 @@ def suite_role():
                        capture_output=True, text=True, timeout=20)
     ok("rejects unknown harness", "unknown harness" in p.stderr)
 
+    # isolation must be opt-in: no worktree unless asked for
+    tmp = tempfile.mkdtemp()
+    subprocess.run(["git", "init", "-q"], cwd=tmp, timeout=20)
+    open(os.path.join(tmp, "a.txt"), "w").write("x")
+    for c in (["git", "add", "-A"],
+              ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "i"]):
+        subprocess.run(c, cwd=tmp, timeout=20)
+
+    def worktrees():
+        r = subprocess.run(["git", "worktree", "list"], cwd=tmp,
+                           capture_output=True, text=True, timeout=20)
+        return len(r.stdout.strip().splitlines())
+
+    subprocess.run([RUN_ROLE, "developer", "--harness", "claude", "--", "x"],
+                   cwd=tmp, capture_output=True, text=True, timeout=30)
+    ok("no worktree without the flag", worktrees() == 1, f"{worktrees()} worktrees")
+
+    p = subprocess.run([RUN_ROLE, "developer", "--harness", "claude", "--worktree", "--", "x"],
+                       cwd=tmp, capture_output=True, text=True, timeout=40)
+    ok("--worktree creates one", worktrees() == 2, f"{worktrees()} worktrees")
+    ok("--worktree reports its base ancestry",
+       "cut from" in p.stderr and "merge orchestrator/" in p.stderr, p.stderr[:200])
+
     # role bodies must survive frontmatter stripping
     for role in ("developer", "ui-developer", "verifier"):
         f = os.path.join(ROOT, "agents", f"{role}.md")

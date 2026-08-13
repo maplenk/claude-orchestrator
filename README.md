@@ -86,6 +86,11 @@ else. Resolution order is `--model` > `modelByRole[role]` > `model`.
 
 Set `RUN_ROLE_THINKING` (default `medium`) if runs are too slow or not thorough enough.
 
+Pass `--worktree` to run a role in its own checkout, so concurrent delegations cannot collide
+over a shared index. It is opt-in by design — where an agent's work lands is your call, not a
+silent default. The branch, its base SHA, and the merge and cleanup commands are printed when
+it starts.
+
 Each non-Claude harness also has a first-party plugin worth installing alongside this one, for
 background job control and review commands: `openai/codex-plugin-cc`,
 `xai-org/grok-build-plugin-cc`, `Agents365-ai/pi-plugin-cc`.

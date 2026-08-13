@@ -74,6 +74,20 @@ model runs it. Ask once per wave, not once per task, unless the wave mixes genui
 kinds of work. `askPerWave: false` in the registry skips the prompt. Never substitute a
 different harness silently when the chosen one is unavailable — say so and re-ask.
 
+**Ask whether to isolate, before launching a wave with more than one task.** Concurrent
+agents against one checkout share an index: even with non-overlapping files, a `git add` by
+you or by another agent sweeps up work that is still being written. Put it to the user:
+
+| Choice | What happens |
+| --- | --- |
+| Shared tree, sequential | one task at a time; simplest, slowest |
+| One worktree per task | tasks run concurrently and safely; each lands on its own branch |
+
+Never assume isolation. `Agent(isolation: "worktree")` for the claude harness, `--worktree` for
+`run-role`; both are opt-in and neither is a default, because where an agent's work lands is
+the user's decision. If they choose a shared tree, run the wave **sequentially** and do not
+`git add -A` while anything is still running.
+
 Launch a wave's agents **in a single message** so they run concurrently, with
 `run_in_background: true`. Then **end your turn**. The completion notification wakes you —
 do not poll a running agent, and never claim a result that has not arrived.
@@ -140,6 +154,7 @@ inert → flag-off → live-behaviour boundary, so each commit is separately rev
 - Reporting a wave as passing when a verification command was skipped
 - Expanding scope mid-wave instead of adding a task to the next one
 - Cutting a worktree from a branch you did not verify by ancestry
+- Running concurrent agents against a shared checkout, then `git add -A` over their half-written work
 
 ## References
 

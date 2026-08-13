@@ -61,7 +61,15 @@ index. With **one worktree per task**, a wave runs concurrently and safely.
 
 ```
 Agent(subagent_type: "orchestrator:developer", isolation: "worktree", prompt: <brief>)
+~/.claude/bin/run-role developer --harness codex --worktree -- "<brief>"
 ```
+
+Both are **opt-in**. Ask the user before a multi-task wave rather than choosing for them —
+isolation decides where their work lands and what they have to merge afterwards.
+
+`run-role --worktree` cuts `orchestrator/<role>-<pid>` from the current HEAD into
+`.claude/orchestrator/worktrees/`, prints the base ref and SHA it cut from, and prints the
+merge and removal commands. Review the branch before merging; remove the worktree after.
 
 Each agent gets its own checkout and its own index. Three rules:
 
