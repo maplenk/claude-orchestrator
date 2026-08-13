@@ -106,9 +106,12 @@ for p in (os.path.join(os.getcwd(), ".claude", "settings.local.json"),
     style = (read_json(p) or {}).get("outputStyle")
     if style:
         break
-check("Orchestrator output style", OK if style == "Orchestrator" else WARN,
+# Plugin output styles arrive namespaced ("orchestrator:Orchestrator"), so compare
+# on the style name rather than the whole string.
+style_on = bool(style) and style.rsplit(":", 1)[-1].strip().lower() == "orchestrator"
+check("Orchestrator output style", OK if style_on else WARN,
       f"current: {style or 'Default'}",
-      None if style == "Orchestrator" else "/config -> Output style -> Orchestrator",
+      None if style_on else "/config -> Output style -> Orchestrator",
       required=False)
 
 registry = read_json(os.path.join(CLAUDE, "orchestrator", "harnesses.json"))

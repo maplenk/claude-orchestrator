@@ -64,6 +64,12 @@ def suite_guard():
             e["agent_id"] = agent
         return guard(e, tmp)
 
+    # plugin output styles are namespaced; a bare-name check silently disables the
+    # guard for every plugin install, which is the only supported install path
+    style("orchestrator:Orchestrator")
+    ok("namespaced plugin style still enforces", write("app/x.php"))
+    ok("namespaced style still allows specs", not write("docs/specs/p.md"))
+
     # inert unless the style is active — this is what keeps it out of normal sessions
     style("Default")
     ok("inert under Default style", not write("app/x.php"))

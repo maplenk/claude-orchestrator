@@ -40,6 +40,15 @@ def deny(reason):
     sys.exit(0)
 
 
+def is_orchestrator(style):
+    """Plugin output styles are namespaced as "<plugin>:<Style>", so a bare
+    equality check silently disables the guard for every plugin install — which
+    is the only supported install path. Match on the style name itself."""
+    if not style:
+        return False
+    return style.rsplit(":", 1)[-1].strip().lower() == "orchestrator"
+
+
 def output_style(cwd):
     candidates = [
         os.path.join(cwd, ".claude", "settings.local.json"),
@@ -76,7 +85,7 @@ def main():
     if event.get("agent_id"):
         return
     cwd = event.get("cwd") or os.getcwd()
-    if output_style(cwd) != "Orchestrator":
+    if not is_orchestrator(output_style(cwd)):
         return
 
     tool = event.get("tool_name", "")
