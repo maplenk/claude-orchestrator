@@ -143,6 +143,9 @@ def _apply_run_event(ev):
         if ev.get("note"):
             rec["note"] = ev["note"]
         run["stages"].append(rec)
+    elif kind == "pid":
+        if ev.get("pid") not in (None, ""):
+            run["pid"] = ev["pid"]
     elif kind == "paused":
         run["state"] = "paused"
         run["pauses"].append({"start": ev.get("ts")})
@@ -365,6 +368,28 @@ def op_run_stage(id=None, stage=None, note=None, **_):
         return {"ok": True, "id": id, "run": run}
 
 
+def op_run_pid(id=None, pid=None, **_):
+    """Attach a pid to a run that is already open.
+
+    A caller cannot always know the pid at open time: bash learns a child's pid
+    only after starting it, and a run id exported after that child starts is not
+    inherited by it. Opening first and attaching here breaks that circularity.
+    """
+    if pid in (None, ""):
+        return {"error": "pid required"}
+    pid_val, err = _parse_pid(pid)
+    if err:
+        return err
+    with LOCK:
+        run, err = _get_run(id)
+        if err:
+            return err
+        if run["state"] in ("complete", "failed"):
+            return {"error": f"run {id} is already {run['state']}"}
+        append_run({"id": id, "event": "pid", "ts": _now(), "pid": pid_val})
+        return {"ok": True, "id": id, "run": run}
+
+
 def op_run_pause(id=None, **_):
     with LOCK:
         run, err = _get_run(id)
@@ -527,7 +552,7 @@ OPS = {"register": op_register, "send": op_send, "read": op_read,
        "wait": op_wait, "who": op_who, "status": op_status}
 
 RUN_OPS = {
-    "run_open": op_run_open, "run_stage": op_run_stage,
+    "run_open": op_run_open, "run_stage": op_run_stage, "run_pid": op_run_pid,
     "run_pause": op_run_pause, "run_resume": op_run_resume,
     "run_close": op_run_close, "run_list": op_run_list,
 }
@@ -580,6 +605,11 @@ TOOLS = [
          "id": {"type": "string"},
          "stage": {"type": "string"},
          "note": {"type": "string"}}}},
+    {"name": "run_pid",
+     "description": "Attach an OS pid to an already-open run, so pause can SIGSTOP it. Use when the pid is only knowable after the run was opened.",
+     "inputSchema": {"type": "object", "required": ["id", "pid"], "properties": {
+         "id": {"type": "string"},
+         "pid": {"type": "integer", "description": "OS pid of the process this run is driving"}}}},
     {"name": "run_pause",
      "description": "Pause a run by sending SIGSTOP to its recorded pid. Fails without changing state if there is no pid or the process is gone.",
      "inputSchema": {"type": "object", "required": ["id"], "properties": {
@@ -634,8 +664,9 @@ class Handler(BaseHTTPRequestHandler):
         if method == "POST" and parts == ["runs"]:
             return op_run_open(**payload)
         if method == "POST" and len(parts) == 3 and parts[0] == "runs":
-            fn = {"stage": op_run_stage, "pause": op_run_pause,
-                  "resume": op_run_resume, "close": op_run_close}.get(parts[2])
+            fn = {"stage": op_run_stage, "pid": op_run_pid,
+                  "pause": op_run_pause, "resume": op_run_resume,
+                  "close": op_run_close}.get(parts[2])
             if not fn:
                 return None
             payload = dict(payload)
