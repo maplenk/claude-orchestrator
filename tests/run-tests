@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -266,6 +267,51 @@ def _wait_size(path, minimum, timeout=5.0):
     return n
 
 
+def _bus_up(cwd):
+    """Start a bus on the scratch port against `cwd`, or None if it never answers."""
+    proc = subprocess.Popen([sys.executable, BUS, "serve", "--port", str(PORT),
+                             "--session", "TEST"], cwd=cwd,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        try:
+            api("/health", timeout=2)
+            return proc
+        except (urllib.error.URLError, OSError):
+            time.sleep(0.2)
+    _reap(proc)
+    return None
+
+
+def _run_where(**match):
+    """The newest run matching every field, or {} — /runs lists newest last."""
+    for r in reversed(api("/runs")["runs"]):
+        if all(r.get(k) == v for k, v in match.items()):
+            return r
+    return {}
+
+
+def _stages(run):
+    return [s.get("stage") for s in run.get("stages") or []]
+
+
+def _dead_port():
+    """A port nothing is listening on, so a bus call there is refused outright."""
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+def _frozen(path, samples=6, gap=0.1):
+    """Sizes of `path` sampled over time — all equal means the writer is stopped."""
+    out = []
+    for _ in range(samples):
+        out.append(_file_size(path))
+        time.sleep(gap)
+    return out
+
+
 def suite_runs():
     print("\nruns")
     tmp = tempfile.mkdtemp()
@@ -455,6 +501,84 @@ def suite_runs():
         health = api("/health")
         ok("server answers /health after a dead pid",
            health.get("ok") is True, str(health))
+
+        # ---- pid attached after open
+        # bash learns its child's pid only after starting it, and a run id
+        # exported after the child starts is not inherited by it. So the run has
+        # to be openable with no pid and completable afterwards.
+        late = api("/runs", {"title": "attach later", "role": "developer"})
+        late_id = late.get("id")
+        ok("a run opens with no pid",
+           bool(late_id) and "pid" not in (late.get("run") or {}), str(late))
+
+        att = api(f"/runs/{late_id}/pid", {"pid": child.pid})
+        ok("POST pid attaches the pid",
+           att.get("ok") is True
+           and (att.get("run") or {}).get("pid") == child.pid, str(att))
+        ok("an attached pid shows up in GET /runs",
+           _run_where(id=late_id).get("pid") == child.pid,
+           str(_run_where(id=late_id)))
+
+        # every refusal must also leave the run exactly as it was — an error
+        # reply is worth nothing if the pid was recorded anyway
+        snap = _run_where(id=late_id)
+        for label, path, payload in (
+                ("an unknown run id", "/runs/nosuchrun/pid", {"pid": child.pid}),
+                ("a missing pid", f"/runs/{late_id}/pid", {}),
+                ("a null pid", f"/runs/{late_id}/pid", {"pid": None}),
+                ("a non-integer pid", f"/runs/{late_id}/pid", {"pid": "not-a-pid"}),
+                # kill(0, sig) signals the whole process group
+                ("pid 0", f"/runs/{late_id}/pid", {"pid": 0})):
+            reply = api(path, payload)
+            after = _run_where(id=late_id)
+            ok(f"refuses {label}, leaving the run unchanged",
+               "error" in reply and reply.get("ok") is not True and after == snap,
+               f"reply {reply} / run {after}")
+
+        for outcome in ("complete", "failed"):
+            shut = api("/runs", {"title": f"closed {outcome} before pid"})
+            api(f"/runs/{shut['id']}/close", {"outcome": outcome, "exit_code": 0})
+            reply = api(f"/runs/{shut['id']}/pid", {"pid": child.pid})
+            ok(f"refuses a pid on an already-{outcome} run",
+               "error" in reply and f"already {outcome}" in str(reply.get("error"))
+               and "pid" not in _run_where(id=shut["id"]),
+               f"reply {reply} / run {_run_where(id=shut['id'])}")
+
+        # the ticker must be observed still writing first: a freeze assertion
+        # over a process that already died passes for the wrong reason
+        pre = _file_size(tick)
+        alive = _wait_size(tick, pre + 1)
+        paused2 = api(f"/runs/{late_id}/pause", {})
+        ok("POST pause records paused for an attached pid",
+           paused2.get("ok") is True
+           and (paused2.get("run") or {}).get("state") == "paused", str(paused2))
+        held = _frozen(tick)
+        api(f"/runs/{late_id}/resume", {})
+        thawed = _wait_size(tick, held[-1] + 1)
+        ok("an attached pid really freezes and thaws the process",
+           alive > pre and len(set(held)) == 1 and thawed > held[-1],
+           f"{pre} -> {alive}, held {held}, then {thawed}")
+
+        # the pid must come back from the JSONL, not merely from memory
+        _reap(proc)
+        proc = _bus_up(tmp)
+        if proc is None:
+            ok("bus restarts on the same directory", False, "never became healthy")
+            return
+        replayed = _run_where(id=late_id)
+        ok("an attached pid survives a bus restart",
+           replayed.get("pid") == child.pid and replayed.get("state") == "running",
+           str(replayed))
+
+        pre = _file_size(tick)
+        alive = _wait_size(tick, pre + 1)
+        api(f"/runs/{late_id}/pause", {})
+        held = _frozen(tick)
+        api(f"/runs/{late_id}/resume", {})
+        thawed = _wait_size(tick, held[-1] + 1)
+        ok("a replayed pid still freezes and thaws the process",
+           alive > pre and len(set(held)) == 1 and thawed > held[-1],
+           f"{pre} -> {alive}, held {held}, then {thawed}")
     finally:
         for child in children:
             _reap(child)
@@ -521,6 +645,171 @@ def suite_role():
         body = open(f).read().split("---", 2)[-1].strip()
         ok(f"{role} has a body after frontmatter", len(body) > 400, f"{len(body)} chars")
 
+    role_provenance()
+
+
+# ------------------------------------------------------- run-role provenance
+# What run-role leaves behind: a run on the bus that says how the delegation
+# went, and an environment the harness can read its own identity out of. Both
+# are checked against a fake harness, so no model is ever invoked — and every
+# assertion reads a real process or a real bus record, never the script text.
+
+FAKE_HARNESS = """#!/bin/sh
+# Stands in for codex. Records what run-role handed it, then exits as asked.
+env > "$FAKE_ENV_FILE"
+echo $$ > "$FAKE_PID_FILE"
+echo fake-harness-stdout
+echo fake-harness-stderr >&2
+exit ${FAKE_EXIT:-0}
+"""
+
+
+def role_provenance():
+    tmp = tempfile.mkdtemp()
+    subprocess.run(["git", "init", "-q"], cwd=tmp, timeout=20)
+    home = os.path.join(tmp, "home")
+    bindir = os.path.join(tmp, "bin")
+    os.makedirs(home)
+    os.makedirs(bindir)
+    fake = os.path.join(bindir, "codex")
+    with open(fake, "w") as fh:
+        fh.write(FAKE_HARNESS)
+    os.chmod(fake, 0o755)
+    envfile = os.path.join(tmp, "harness-env")
+    pidfile = os.path.join(tmp, "harness-pid")
+    # /usr/bin and /bin carry python3, curl, git and awk but no real harness, so
+    # the only one reachable is ours. An empty HOME keeps the model registry out.
+    path = f"{bindir}:/usr/bin:/bin"
+
+    def delegate(args, port=PORT, exit_code=0):
+        for f in (envfile, pidfile):
+            if os.path.exists(f):
+                os.unlink(f)
+        # a minimal env, so an ORCHESTRATOR_* the harness sees can only have come
+        # from run-role — inheriting the suite's env would prove nothing
+        env = {"PATH": path, "HOME": home, "TMPDIR": tempfile.gettempdir(),
+               "AGENT_BUS_PORT": str(port), "FAKE_ENV_FILE": envfile,
+               "FAKE_PID_FILE": pidfile, "FAKE_EXIT": str(exit_code)}
+        return subprocess.run([RUN_ROLE] + args, cwd=tmp, env=env,
+                              capture_output=True, text=True, timeout=60)
+
+    def harness_env():
+        out = {}
+        try:
+            with open(envfile) as fh:
+                for line in fh:
+                    if line.startswith("ORCHESTRATOR_"):
+                        k, _, v = line.rstrip("\n").partition("=")
+                        out[k] = v
+        except OSError:
+            pass
+        return out
+
+    def harness_pid():
+        try:
+            with open(pidfile) as fh:
+                return int(fh.read().strip())
+        except (OSError, ValueError):
+            return 0
+
+    proc = _bus_up(tmp)
+    try:
+        if proc is None:
+            ok("bus starts for run-role", False, "never became healthy")
+            return
+        ok("bus starts for run-role", api("/runs")["runs"] == [],
+           "port already carries runs — a stale bus is answering")
+
+        # ---- a delegation that succeeds
+        title = "wave3 fake delegation succeeds"
+        good = delegate(["developer", "--harness", "codex",
+                         "--model", "test-model-x", "--", title])
+        run = _run_where(title=title)
+        ok("a successful delegation stages running then complete",
+           _stages(run) == ["running", "complete"], f"rc={good.returncode} {run}")
+        ok("a successful delegation closes complete, exit 0",
+           good.returncode == 0 and run.get("state") == "complete"
+           and run.get("outcome") == "complete" and run.get("exit_code") == 0,
+           f"rc={good.returncode} {run}")
+        ok("run-role attaches the launched harness pid to the run",
+           harness_pid() > 0 and run.get("pid") == harness_pid(),
+           f"harness reported {harness_pid()}, run carries {run.get('pid')}")
+
+        seen = harness_env()
+        ok("the harness inherits role, harness, model, bus and delegate",
+           {k: seen.get(k) for k in ("ORCHESTRATOR_ROLE", "ORCHESTRATOR_HARNESS",
+                                     "ORCHESTRATOR_MODEL", "ORCHESTRATOR_BUS",
+                                     "ORCHESTRATOR_DELEGATE")}
+           == {"ORCHESTRATOR_ROLE": "developer",
+               "ORCHESTRATOR_HARNESS": "codex",
+               "ORCHESTRATOR_MODEL": "test-model-x",
+               "ORCHESTRATOR_BUS": f"http://127.0.0.1:{PORT}",
+               "ORCHESTRATOR_DELEGATE": "developer"},
+           str(seen))
+        ok("ORCHESTRATOR_RUN_ID is the run the bus actually opened",
+           bool(run.get("id")) and seen.get("ORCHESTRATOR_RUN_ID") == run.get("id"),
+           f"harness saw {seen.get('ORCHESTRATOR_RUN_ID')!r}, bus opened {run.get('id')!r}")
+
+        # empty means "the harness is on its own default"; a guess would be worse
+        title = "wave3 delegation with no model"
+        delegate(["developer", "--harness", "codex", "--", title])
+        seen = harness_env()
+        ok("ORCHESTRATOR_MODEL is set and empty when no model resolves",
+           seen.get("ORCHESTRATOR_MODEL") == ""
+           and "ORCHESTRATOR_MODEL" in seen, str(seen))
+
+        # ---- a delegation that fails
+        title = "wave3 fake delegation fails"
+        bad = delegate(["developer", "--harness", "codex",
+                        "--model", "test-model-x", "--", title], exit_code=7)
+        run = _run_where(title=title)
+        ok("a failing delegation stages running then failed",
+           _stages(run) == ["running", "failed"], f"rc={bad.returncode} {run}")
+        ok("a failing delegation propagates the harness exit code",
+           bad.returncode == 7 and run.get("state") == "failed"
+           and run.get("exit_code") == 7, f"rc={bad.returncode} {run}")
+
+        # ---- delegations that never launch anything: recorded, not absent
+        for label, args, code in (
+                ("an unknown harness", ["--harness", "nope"], 64),
+                ("the claude pointer", ["--harness", "claude"], 64)):
+            title = f"wave3 blocked by {label}"
+            p = delegate(["developer"] + args + ["--", title])
+            run = _run_where(title=title)
+            ok(f"{label} is recorded blocked and closed failed",
+               p.returncode == code and _stages(run) == ["blocked"]
+               and run.get("state") == "failed" and run.get("exit_code") == code
+               and not os.path.exists(pidfile),
+               f"rc={p.returncode} {run}")
+
+        # pi is the one harness with a preflight check; PATH is ours, so its
+        # absence is asserted rather than assumed
+        title = "wave3 blocked by a missing pi"
+        p = delegate(["developer", "--harness", "pi", "--", title])
+        run = _run_where(title=title)
+        ok("a missing harness binary is recorded blocked, exit 69",
+           shutil.which("pi", path=path) is None and p.returncode == 69
+           and _stages(run) == ["blocked"] and run.get("state") == "failed"
+           and run.get("exit_code") == 69 and not os.path.exists(pidfile),
+           f"rc={p.returncode} pi={shutil.which('pi', path=path)} {run}")
+
+        # ---- a down bus must be invisible to the caller
+        title = "wave3 delegation with the bus down"
+        down = delegate(["developer", "--harness", "codex",
+                         "--model", "test-model-x", "--", title],
+                        port=_dead_port(), exit_code=7)
+        ok("a down bus neither stops the harness nor changes its exit code",
+           down.returncode == 7 and harness_pid() > 0
+           and "fake-harness-stdout" in down.stdout and _run_where(title=title) == {},
+           f"rc={down.returncode} out={down.stdout!r}")
+        ok("a down bus prints nothing extra",
+           down.stdout == bad.stdout and down.stderr == bad.stderr,
+           f"stdout {bad.stdout!r} -> {down.stdout!r}; "
+           f"stderr {bad.stderr!r} -> {down.stderr!r}")
+    finally:
+        _reap(proc)
+        shutil.rmtree(tmp, ignore_errors=True)
+
 
 SUITES = {"guard": suite_guard, "bus": suite_bus, "runs": suite_runs,
           "role": suite_role}
@@ -529,6 +818,9 @@ if __name__ == "__main__":
     # a live orchestrator session exports these; they must not leak into the suite
     os.environ.pop("ORCHESTRATOR_DELEGATE", None)
     os.environ.pop("ORCHESTRATOR_COMMIT", None)
+    # run-role opens a run for every delegation, refusals included. Pointed at the
+    # default port the suite would post its fixtures into a live session's bus.
+    os.environ["AGENT_BUS_PORT"] = str(PORT)
     which = sys.argv[1:] or list(SUITES)
     for name in which:
         if name not in SUITES:
