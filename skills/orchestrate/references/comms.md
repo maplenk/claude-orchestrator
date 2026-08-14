@@ -42,7 +42,7 @@ rather than stores, so leave it empty rather than guessing:
 BUS=${ORCHESTRATOR_BUS:-http://127.0.0.1:8477}
 ROLE=${ORCHESTRATOR_ROLE:-developer}
 REG="{\"name\":\"$ROLE\",\"role\":\"$ROLE\",\"harness\":\"$ORCHESTRATOR_HARNESS\",\"model\":\"$ORCHESTRATOR_MODEL\"}"
-TOKEN=$(curl -s -X POST $BUS/register -d "$REG" | jq -r .token)
+TOKEN=$(curl -s -X POST $BUS/register -d "$REG" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 curl -s -X POST $BUS/send -d "{\"token\":\"$TOKEN\",\"to\":\"orchestrator\",\"msg\":\"task 2 done\"}"
 curl -s "$BUS/read?token=$TOKEN&since=$CURSOR"
 # developer and ui-developer stage understanding → implementing → verifying, the verifier
