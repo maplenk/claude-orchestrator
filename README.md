@@ -72,6 +72,27 @@ transcript rather than hidden in a config flag.
 
 ## Harnesses
 
+**The CLIs are not installed by this plugin.** `claude` is built in and needs nothing. The other
+three are separate projects, installed and authenticated on their own terms:
+
+```bash
+npm install -g @openai/codex                    # codex — github.com/openai/codex
+curl -fsSL https://x.ai/cli/install.sh | bash   # grok  — xAI's own installer
+npm install -g @earendil-works/pi-coding-agent  # pi
+```
+
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (`brew install cliproxyapi`) is
+external too, and is used for exactly one thing: `orchestrator-harnesses` asks it which `gpt-*`
+and `grok-*` models are actually served and marks those harnesses available accordingly. It
+takes `~/.claude/bin/cliproxy-run` and `~/.claude/cliproxy.key` as the sign you have it set up,
+then queries `http://127.0.0.1:8317` — `CLIPROXY_BASE_URL` moves that. `run-role` does not go
+through the proxy at all: `--harness codex` shells out to the native `codex` CLI. The proxy is
+for the model list, and for the companion plugins' own subagents.
+
+**A machine with none of this is not a broken install.** Every role runs on the `claude` harness
+alone, and `orchestrator-doctor` reports the missing pieces as warnings rather than failures —
+run it to see what a given machine is short of.
+
 ```bash
 ~/.claude/bin/orchestrator-harnesses           # probe + print
 ~/.claude/bin/run-role developer --harness pi -- "<brief>"
