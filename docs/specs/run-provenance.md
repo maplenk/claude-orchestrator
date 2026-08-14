@@ -175,3 +175,108 @@ which is exactly today's state. Wave 3 is tests. Each wave is its own commit.
 ## Results
 
 _Appended after each wave._
+
+### Wave 1 — `POST /runs/<id>/pid` — ACCEPTED
+
+`scripts/agent-bus`, +34/-3. `op_run_pid` reuses `_parse_pid` and `_get_run`, appends a `pid`
+event, and is wired into `_apply_run_event`, the HTTP route table, the ops dict and the MCP
+tool list.
+
+Verified by a second agent's script, re-run by the orchestrator on port 8483:
+
+- **C1** — `pid` absent at open, `50096` after attach, same in `GET /runs`.
+- **C2 — a real freeze.** Tick lines `3 → 3 → 3` across a 2.0s pause; `ps` state `Ts`. After
+  resume: 13 lines (+10) and `Ss`. Not a state flip.
+- **C3** — six refusals (unknown id, non-integer pid, float string, missing, null, closed run),
+  each with a sensible error and the runs JSONL byte-identical at 715 bytes throughout.
+- **C4** — pid `50096` still present after stopping the bus and starting a new one against the
+  same JSONL.
+- **C5** — `tests/run-tests`: 88 passed, 0 failed, matching the pre-change baseline.
+
+Noted, not a defect: errors return HTTP 200 with an `{"error": ...}` body. That is this bus's
+existing convention (`op_run_stage` behaves the same), and the criterion asked for consistency
+with it.
+
+Process note: the implementing agent went idle twice without reporting evidence. The diff was
+sound, so it was kept and verified independently rather than re-run.
+
+### Wave 2 — the producers — ACCEPTED
+
+`scripts/run-role` +62/-25; `agents/{developer,ui-developer,verifier}.md` +13/-8 each;
+`skills/orchestrate/references/comms.md` +14/-5.
+
+The clearest evidence is a differential runs JSONL, old `run-role` against new, on one bus:
+
+```
+old  {"id":"99c4ad","event":"opened",...,"pid":61765}
+     {"id":"99c4ad","event":"stage","stage":"running"}
+     {"id":"99c4ad","event":"closed","outcome":"complete"}          <- one stage, no terminal
+
+new  {"id":"22fc2b","event":"opened",...}                            <- no pid at open
+     {"id":"22fc2b","event":"pid","pid":61844}                       <- attached after launch
+     {"id":"22fc2b","event":"stage","stage":"running"}
+     {"id":"22fc2b","event":"stage","stage":"complete"}              <- terminal stage, before close
+     {"id":"22fc2b","event":"closed","outcome":"complete"}
+```
+
+- **Stage bracket** — success gives `running` → `complete`; failure gives `running` → `failed`
+  with the harness's real exit code (42 in the probe). The terminal stage is ordered before the
+  close event in the JSONL, so it is not being silently rejected.
+- **`blocked`** — unknown harness (exit 64), the `claude` pointer (64), `pi` absent (69), and
+  the `--read-only` refusal (64) each record `blocked` then close `failed`.
+- **Environment** — the child saw all five variables; `ORCHESTRATOR_DELEGATE=developer`
+  unchanged. With no model resolved, `ORCHESTRATOR_MODEL=` empty and no `-c model=` in argv —
+  empty rather than wrong, as specified.
+- **Bus down** — argv SHA identical to the old script (`00c17c26…`), stderr identical, exit
+  codes 0 and 7 propagated, `ORCHESTRATOR_RUN_ID=` empty.
+- **`pi` refactor** — argv identical old vs new: `ARGC=12` including `--tools read` under
+  `--read-only`, `ARGC=10` without. Behaviour-preserving.
+- **Pause attaches the right pid** — the fake harness recorded its own pid as `76732`; the run's
+  `pid` event is `76732`. Not the wrapper's. This was the risk worth chasing: had `run-role`
+  attached its own pid, pause would freeze the wrapper while the harness ran on, and every
+  other number would still have looked correct.
+- **Snippets** — all four extracted verbatim from the docs (0-byte diffs) and run against a live
+  bus; registrations and `implementing`/`checking` stages both landed.
+- `tests/run-tests`: 88 passed, 0 failed.
+
+Honest limit on the end-to-end pause: explicit before/after tick counts were not captured. What
+is on record is the pid identity above, `paused` → `resumed` two seconds apart, and 16 ticks
+across roughly four seconds of wall clock where an unfrozen 10/s ticker would have produced
+about forty. Together with wave 1's direct freeze proof (`3 → 3 → 3`, `ps` state `Ts`) that is
+sufficient, but it is inference rather than a fourth direct observation.
+
+Unrequested change, kept: the agent consolidated the `pi` branch into one `PI_ARGS` array. The
+old code called `run_harness` with `--tools read` and then again without it, working only
+because `run_harness` exits — a read-only delegation was one edit away from running writable.
+Verified behaviour-preserving above.
+
+### Wave 3 — tests — ACCEPTED
+
+`tests/run-tests` +292/-0, purely additive: **88 → 116 checks**, green twice consecutively, no
+stray bus left on the test port. No existing check weakened or removed.
+
+The tests read behaviour, not script text: a fake harness is launched by `run-role` with a
+deliberately minimal environment, so any `ORCHESTRATOR_*` it reports can only have come from
+`run-role`. `run.pid` is asserted equal to the pid the harness reported for itself. Freezes are
+asserted by sampling file size six times and requiring every sample identical, after first
+observing the writer alive — a freeze assertion over an already-dead process would otherwise
+pass for the wrong reason. `AGENT_BUS_PORT` is pinned so the suite can never post fixtures into
+a live session's bus.
+
+### Wave 4 — verification — ACCEPTED
+
+Full record: `docs/reviews/run-provenance-verification.md`.
+
+Both originally-failed criteria hold. A live delegation records five stages
+(`running → understanding → implementing → verifying → complete`); `/status` shows
+`role/harness/model` populated.
+
+Mutation testing answered the question the pass count could not: against the old `run-role`,
+8 of the new checks go red, with `'stages': [{'stage': 'running'}]` and `'stages': []` in the
+failure detail — the original defect reproduced. Against the old `agent-bus`, the suite aborts
+at the pid call with a 404, proving those checks depend on the new endpoint. No new check was
+found passing against an old implementation.
+
+Standing gap: every stage progression on record came from a fake harness executing the snippet
+deterministically. The mechanism is proven; a real model's compliance with the staging
+instruction is not, and cannot be until real delegations run.
