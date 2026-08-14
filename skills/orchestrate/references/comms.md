@@ -27,18 +27,27 @@ defaults to the git branch. Handshake at `.claude/orchestrator/bus.json`:
 ```
 
 **Claude agents** use the MCP tools: `chat_register`, `chat_send`, `chat_read`, `chat_wait`,
-`chat_who`. Register it once:
+`chat_who` — registering with their role and `harness: "claude"`, and omitting `model`, since a
+guessed model id answers "which model is this agent on" wrongly. Add the server once:
 
 ```bash
 claude mcp add agent-bus --transport http http://127.0.0.1:8477/mcp
 ```
 
-**Headless harnesses** use REST with the same semantics — every harness has curl:
+**Headless harnesses** use REST with the same semantics — every harness has curl. `run-role`
+exports the identity to register with and the run to stage against; an empty value the bus drops
+rather than stores, so leave it empty rather than guessing:
 
 ```bash
-TOKEN=$(curl -s -X POST http://127.0.0.1:8477/register -d '{"name":"developer"}' | jq -r .token)
-curl -s -X POST http://127.0.0.1:8477/send -d "{\"token\":\"$TOKEN\",\"to\":\"orchestrator\",\"msg\":\"task 2 done\"}"
-curl -s "http://127.0.0.1:8477/read?token=$TOKEN&since=$CURSOR"
+BUS=${ORCHESTRATOR_BUS:-http://127.0.0.1:8477}
+ROLE=${ORCHESTRATOR_ROLE:-developer}
+REG="{\"name\":\"$ROLE\",\"role\":\"$ROLE\",\"harness\":\"$ORCHESTRATOR_HARNESS\",\"model\":\"$ORCHESTRATOR_MODEL\"}"
+TOKEN=$(curl -s -X POST $BUS/register -d "$REG" | jq -r .token)
+curl -s -X POST $BUS/send -d "{\"token\":\"$TOKEN\",\"to\":\"orchestrator\",\"msg\":\"task 2 done\"}"
+curl -s "$BUS/read?token=$TOKEN&since=$CURSOR"
+# developer and ui-developer stage understanding → implementing → verifying, the verifier
+# understanding → checking → reporting. No ORCHESTRATOR_RUN_ID means no run: skip it, silently.
+[ -z "$ORCHESTRATOR_RUN_ID" ] || curl -so /dev/null -X POST "$BUS/runs/$ORCHESTRATOR_RUN_ID/stage" -d '{"stage":"implementing"}'
 ```
 
 Three properties worth knowing:

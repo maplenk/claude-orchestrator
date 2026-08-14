@@ -57,18 +57,23 @@ that is not complete costs more to discover than it saved.
 ## Coordination
 
 Join the session bus first, then read anything addressed to you or to everyone. Claude harnesses
-use the MCP tools (`chat_register`, `chat_send`, `chat_read`, `chat_wait`); headless harnesses
-use the same operations over REST on `http://127.0.0.1:8477`:
+use the MCP tools (`chat_register` with your role and `harness: "claude"`, omitting `model`
+rather than guessing it); headless harnesses use REST, registering from the identity `run-role`
+exported — an empty one the bus drops, so never fill it in from memory:
 
 ```bash
-BUS=http://127.0.0.1:8477
-TOKEN=$(curl -s -X POST $BUS/register -d '{"name":"<your role>"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+BUS=${ORCHESTRATOR_BUS:-http://127.0.0.1:8477}
+ROLE=${ORCHESTRATOR_ROLE:-developer}
+REG="{\"name\":\"$ROLE\",\"role\":\"$ROLE\",\"harness\":\"$ORCHESTRATOR_HARNESS\",\"model\":\"$ORCHESTRATOR_MODEL\"}"
+TOKEN=$(curl -s -X POST $BUS/register -d "$REG" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 curl -s "$BUS/read?token=$TOKEN"
 curl -s -X POST $BUS/send -d "{\"token\":\"$TOKEN\",\"to\":\"orchestrator\",\"msg\":\"<one line>\"}"
+
+# stage two or three times as the work moves: understanding → implementing → verifying.
+# An empty ORCHESTRATOR_RUN_ID means there is no run — this skips, silently, and that is normal.
+[ -z "$ORCHESTRATOR_RUN_ID" ] || curl -so /dev/null -X POST "$BUS/runs/$ORCHESTRATOR_RUN_ID/stage" -d '{"stage":"implementing"}'
 ```
 
 Post when something changes what another role should do — a scope collision, a constraint you
-had to break, your verdict. Your identity comes from the token, not from what you claim.
-
-If the bus is not running, fall back to the file it writes:
-`~/.claude/bin/agent-board read --to <your role>`.
+had to break, your verdict. Your identity comes from the token, not from what you claim. If the
+bus is not running, fall back to `~/.claude/bin/agent-board read --to <your role>`.

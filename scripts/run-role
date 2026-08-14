@@ -123,13 +123,8 @@ READONLY_SUPPORTED=0
 case "$HARNESS" in
   pi) READONLY_SUPPORTED=1 ;;
 esac
-if [[ $READONLY -eq 1 && $READONLY_SUPPORTED -eq 0 ]]; then
-  echo "run-role: --read-only cannot be enforced on harness '$HARNESS' — refusing." >&2
-  echo "  Only pi removes its write tools outright; codex and grok were both able to" >&2
-  echo "  write despite their read-only flags. Use --harness pi, or rely on the role" >&2
-  echo "  instructions and drop --read-only." >&2
-  exit 64
-fi
+# The refusal itself is deferred until the bus helpers exist, so that a refused
+# delegation is still recorded as a run that was blocked.
 
 # Title for the run record: the first line of the brief that actually says
 # something. Taking line 1 blindly titled every run "## Task", because that is
@@ -163,8 +158,6 @@ fi
 printf '%s\n' "$ROLE_BODY" > "$ROLE_FILE_TMP"
 trap 'rm -f "$ROLE_FILE_TMP"' EXIT
 
-echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
-
 # Report this delegation as a run so the dashboard can show it and the
 # bus can SIGSTOP the harness pid to pause. The harness stays a child —
 # exec would replace us and leave the run open. Every bus call is
@@ -174,6 +167,19 @@ BUS_URL="http://127.0.0.1:${AGENT_BUS_PORT:-8477}"
 RUN_ID=""
 HARNESS_PID=""
 
+# What this delegation is running on, told to the harness rather than left for
+# the model to recall. Registration and staging read these; a model asked to
+# remember its own harness answers with a plausible guess.
+export ORCHESTRATOR_ROLE="$ROLE"
+export ORCHESTRATOR_HARNESS="$HARNESS"
+# Empty when nothing resolved a model — the harness is on its own default and we
+# do not know what that is. Empty means unknown; never fill it with a guess.
+export ORCHESTRATOR_MODEL="$MODEL"
+export ORCHESTRATOR_BUS="$BUS_URL"
+# Set for real once the run is open, which happens before the child starts.
+# Stays empty if the bus is down: consumers treat empty as "no run, skip staging".
+export ORCHESTRATOR_RUN_ID=""
+
 bus_post() {
   curl -s --connect-timeout 1 -m 1 \
     -X POST "${BUS_URL}$1" \
@@ -181,17 +187,17 @@ bus_post() {
     -d "$2" 2>/dev/null || true
 }
 
+# Opened without a pid: the run id has to exist before the child does, or it
+# cannot be exported to it. The pid is attached afterwards by attach_pid.
 open_run() {
-  local pid="$1" title payload resp
-  title="$RUN_TITLE"
-  payload="$(python3 - "$title" "$ROLE" "$HARNESS" "${MODEL}" "$pid" <<'PY' 2>/dev/null || true
+  local payload resp
+  payload="$(python3 - "$RUN_TITLE" "$ROLE" "$HARNESS" "${MODEL}" <<'PY' 2>/dev/null || true
 import json, sys
 print(json.dumps({
     "title": sys.argv[1],
     "role": sys.argv[2],
     "harness": sys.argv[3],
     "model": sys.argv[4],
-    "pid": int(sys.argv[5]),
 }))
 PY
 )"
@@ -203,6 +209,13 @@ try:
     print("" if i is None else i)
 except Exception:
     pass' 2>/dev/null || true)"
+}
+
+# The other half of opening without a pid — without this the run has nothing to
+# SIGSTOP and pause is inert.
+attach_pid() {
+  [[ -n "$RUN_ID" && -n "${1:-}" ]] || return 0
+  bus_post "/runs/${RUN_ID}/pid" "{\"pid\":$1}" >/dev/null
 }
 
 stage_run() {
@@ -223,24 +236,33 @@ on_signal() {
     kill -s "$1" "$HARNESS_PID" 2>/dev/null || true
     HARNESS_PID=""
   fi
+  # Stage first: the bus refuses a stage on a run that is already closed.
+  stage_run failed
   close_run failed "$2"
   exit "$2"
 }
 trap 'on_signal INT 130' INT
 trap 'on_signal TERM 143' TERM
 
+# A delegation that never launched anything. It still gets a run, so the reason
+# it went nowhere is on the record rather than absent from it.
 fail_run() {
   trap '' INT TERM
-  open_run "$$"
+  open_run
+  stage_run blocked
   close_run failed "$1"
   exit "$1"
 }
 
 run_harness() {
   local ec
+  # Open first, export second, launch third: a variable exported after the child
+  # starts is not inherited by it, so the run id has to be in place beforehand.
+  open_run
+  export ORCHESTRATOR_RUN_ID="$RUN_ID"
   "$@" &
   HARNESS_PID=$!
-  open_run "$HARNESS_PID"
+  attach_pid "$HARNESS_PID"
   stage_run running
   set +e
   wait "$HARNESS_PID"
@@ -248,13 +270,27 @@ run_harness() {
   set -e
   HARNESS_PID=""
   trap '' INT TERM
+  # Terminal stage before the close event, never after — the bus refuses a stage
+  # on a run it already considers complete or failed.
   if [[ $ec -eq 0 ]]; then
+    stage_run complete
     close_run complete 0
   else
+    stage_run failed
     close_run failed "$ec"
   fi
   exit "$ec"
 }
+
+if [[ $READONLY -eq 1 && $READONLY_SUPPORTED -eq 0 ]]; then
+  echo "run-role: --read-only cannot be enforced on harness '$HARNESS' — refusing." >&2
+  echo "  Only pi removes its write tools outright; codex and grok were both able to" >&2
+  echo "  write despite their read-only flags. Use --harness pi, or rely on the role" >&2
+  echo "  instructions and drop --read-only." >&2
+  fail_run 64
+fi
+
+echo "run-role: $ROLE on $HARNESS using ${MODEL:-<harness default>}" >&2
 
 case "$HARNESS" in
   codex)
@@ -284,16 +320,17 @@ case "$HARNESS" in
     ;;
   pi)
     command -v pi >/dev/null || { echo "run-role: pi not on PATH" >&2; fail_run 69; }
-    if [[ $READONLY -eq 1 ]]; then
-      # --tools read is the only setting that actually holds: --exclude-tools
-      # edit,write leaves bash in place and the model just redirects into files.
-      run_harness pi -p --no-session --approve --tools read --thinking "$THINKING" \
-        --model "${MODEL:-moonshotai/Kimi-K3}" \
-        --append-system-prompt "$ROLE_BODY" "$BRIEF"
-    fi
-    run_harness pi -p --no-session --approve --thinking "$THINKING" \
-      --model "${MODEL:-moonshotai/Kimi-K3}" \
-      --append-system-prompt "$ROLE_BODY" "$BRIEF"
+    # One launch, built up conditionally. Two separate run_harness calls only
+    # avoided launching pi twice because run_harness happens to exit — a
+    # read-only delegation was one edit away from silently running writable.
+    PI_ARGS=(-p --no-session --approve)
+    # --tools read is the only setting that actually holds: --exclude-tools
+    # edit,write leaves bash in place and the model just redirects into files.
+    [[ $READONLY -eq 1 ]] && PI_ARGS+=(--tools read)
+    PI_ARGS+=(--thinking "$THINKING"
+              --model "${MODEL:-moonshotai/Kimi-K3}"
+              --append-system-prompt "$ROLE_BODY")
+    run_harness pi "${PI_ARGS[@]}" "$BRIEF"
     ;;
   claude)
     echo "run-role: use the Agent tool for the claude harness:" >&2
